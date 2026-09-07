@@ -2,6 +2,8 @@
 
 FASTA verification and protein annotation for APB2 results.
 
+**[Online documentation](https://anndata-omics-bridge.github.io/apb-fasta/)** or its [source index](docs/index.md).
+
 The first release exposes two independent operations:
 
 - verify that APB2's modification-stripped peptide sequences occur in the supplied FASTA database;
