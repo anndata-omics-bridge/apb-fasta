@@ -1,0 +1,28 @@
+[importlinter]
+root_packages =
+    apb_fasta
+include_external_packages = True
+
+[importlinter:contract:package-tree]
+name = Public annotation and CLI depend inward
+type = layers
+containers =
+    apb_fasta
+exhaustive = True
+layers =
+    cli
+    annotation
+    integration
+    configuration | errors
+    calculation
+
+[importlinter:contract:calculation-isolation]
+name = Calculations do not import APB or storage frameworks
+type = forbidden
+source_modules =
+    apb_fasta.calculation
+forbidden_modules =
+    apb2
+    anndata
+    mudata
+    pandas

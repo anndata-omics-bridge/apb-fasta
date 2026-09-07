@@ -1,0 +1,3 @@
+# Changes
+
+- 2026-09-03: Introduced the APB2-bound FASTA lifecycle. The explicit `verify_peptides()` and `merge_annotations()` operations can run independently, compose in memory through `run()`, and are exposed as matching CLI commands. The package accepts the configured Polars frame produced by `protein_fasta`, validates canonical stripped peptide sequences with Prozor, expands all reported protein-group members into a lossless long annotation table, and returns a copied `ParsedLevels` result with operation-specific reports and provenance. Added H5AD, H5MU, Parquet, and DuckDB coverage. Prozor protein inference remains a later opt-in operation.
