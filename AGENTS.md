@@ -6,13 +6,14 @@ The closest `AGENTS.md` wins. Explicit user instructions override this file.
 
 | Task | Command |
 | --- | --- |
-| Synchronize | `uv sync --frozen --group dev` |
+| Synchronize | `uv sync --frozen --group dev --group docs` |
 | Format | `.venv/bin/ruff format src tests && .venv/bin/ruff check --fix src tests` |
 | Lint | `.venv/bin/ruff check src tests` |
 | Architecture | `.venv/bin/lint-imports` |
 | Typecheck | `.venv/bin/pyright` |
 | Dependencies | `.venv/bin/deptry .` |
 | Tests | `.venv/bin/pytest --cov --cov-branch` |
+| Docs | `uv run --frozen --group docs zensical build --clean --strict` |
 | Build | `uv build && .venv/bin/twine check dist/*` |
 | Full gate | `make check` |
 
@@ -30,4 +31,5 @@ The closest `AGENTS.md` wins. Explicit user instructions override this file.
 - Use strict Pyright and Ruff with the configured 100-character line length.
 - Keep `__init__.py` empty and import public objects from defining modules.
 - Use Google-style docstrings for public APIs.
+- Keep `docs/` current with behavioral changes; `make check` builds it with `--strict`.
 - Preserve unrelated worktree changes and add focused tests with behavioral changes.

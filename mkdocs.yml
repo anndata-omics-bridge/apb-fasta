@@ -1,0 +1,42 @@
+site_name: APB FASTA
+site_description: FASTA peptide verification and protein-group annotation for APB2 results.
+site_url: https://anndata-omics-bridge.github.io/apb-fasta/
+repo_url: https://github.com/anndata-omics-bridge/apb-fasta
+repo_name: anndata-omics-bridge/apb-fasta
+docs_dir: docs
+site_dir: public
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+
+nav:
+  - Home: index.md
+  - Guides:
+      - Verify peptides and annotate proteins: workflow.md
+      - Result layout: results.md
+  - Reference:
+      - Command-line interface: cli.md
+      - Python API: api.md
+  - Architecture: architecture.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false

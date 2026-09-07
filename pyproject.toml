@@ -26,7 +26,9 @@ dependencies = [
 apb-fasta = "apb_fasta.cli:main"
 
 [project.urls]
+Documentation = "https://anndata-omics-bridge.github.io/apb-fasta/"
 Repository = "https://github.com/anndata-omics-bridge/apb-fasta"
+Issues = "https://github.com/anndata-omics-bridge/apb-fasta/issues"
 
 [dependency-groups]
 dev = [
@@ -39,6 +41,11 @@ dev = [
     "pytest-cov>=7,<8",
     "ruff>=0.15,<1",
     "twine>=6,<7",
+]
+docs = [
+    "mkdocstrings[python]>=1.0,<2",
+    "pymdown-extensions>=11,<12",
+    "zensical==0.0.43",
 ]
 
 [tool.uv.sources]

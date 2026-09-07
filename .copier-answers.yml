@@ -1,0 +1,11 @@
+# This file is managed by Copier. Do not edit it manually.
+_src_path: .
+author_email: wew@fgcz.ethz.ch
+author_name: Witold Wolski
+copyright_year: '2026'
+description: FASTA peptide verification and protein-group annotation for APB2 results
+distribution_name: apb-fasta
+license_spdx: MIT
+package_name: apb_fasta
+project_name: APB FASTA
+python_min: '3.13'
