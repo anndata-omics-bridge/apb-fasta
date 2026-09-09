@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "apb-fasta"
+abstract: "FASTA peptide verification and protein-group annotation for APB2 results."
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/anndata-omics-bridge/apb-fasta"
+authors:
+  - family-names: Wolski
+    given-names: Witold E.
+    email: wew@fgcz.ethz.ch
+    affiliation: "Functional Genomics Center Zurich, ETH Zurich / University of Zurich; SIB Swiss Institute of Bioinformatics"
+    # orcid: "https://orcid.org/XXXX-XXXX-XXXX-XXXX"   # fill before the release
+keywords:
+  - proteomics
+  - mass spectrometry
+  - AnnData
+  - data conversion
+references:
+  - type: software
+    title: "apb2: rules-driven conversion of proteomics software output to AnnData"
+    repository-code: "https://github.com/anndata-omics-bridge/apb2"
+    authors:
+      - family-names: Wolski
+        given-names: Witold E.
