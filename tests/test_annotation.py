@@ -6,18 +6,16 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from apb2.api import ParsedLevels, read_parsed_levels, write_parsed_levels
 from apb2.result_facade import (
     FinalLayerTable,
     JsonValue,
     ObsFinal,
     ParsedLevel,
-    ParsedLevels,
     VarFinal,
-    read_parsed_levels,
-    write_parsed_levels,
 )
 
-from apb_fasta.annotation import FastaAnnotationParser
+from apb_fasta.api import FastaAnnotator
 from apb_fasta.cli import app
 from apb_fasta.errors import FastaAnnotationError
 
@@ -35,7 +33,6 @@ def _level(
     uns: dict[str, JsonValue] = {
         "quantification_level": name,
         "column_roles": roles,
-        "matrix_values_projected": True,
     }
     return ParsedLevel(
         obs=ObsFinal(frame=pl.DataFrame({"Run": ["run1"]}), key_columns=("Run",)),
@@ -107,10 +104,10 @@ def _proteins() -> pl.DataFrame:
     )
 
 
-def test_run_verifies_peptides_and_merges_annotations_without_mutating_input() -> None:
+def test_annotate_verifies_peptides_and_merges_annotations_without_mutating_input() -> None:
     source = _parsed()
 
-    result = FastaAnnotationParser(source, _proteins()).run()
+    result = FastaAnnotator(_proteins()).annotate(source)
 
     assert source.levels["peptide"].varm == {}
     assert source.levels["protein"].varm == {}
@@ -125,18 +122,18 @@ def test_run_verifies_peptides_and_merges_annotations_without_mutating_input() -
     assert result.reports.protein_groups.ambiguous_member_count == 1
     metadata = result.parsed.metadata["fasta"]
     assert isinstance(metadata, dict)
-    assert set(metadata) == {
-        "schema_version",
-        "peptide_verification",
-        "protein_annotation",
-    }
+    assert set(metadata) == {"schema_version", "provenance"}
+    assert metadata["schema_version"] == "2"
+    assert isinstance(metadata["provenance"], dict)
+    assert set(metadata["provenance"]) == {"peptide_verification", "protein_annotation"}
 
 
 def test_operations_run_independently() -> None:
-    parser = FastaAnnotationParser(_parsed(), _proteins())
+    parsed = _parsed()
+    annotator = FastaAnnotator(_proteins())
 
-    verified = parser.verify_peptides()
-    annotated = parser.merge_annotations()
+    verified = annotator.verify_peptides(parsed)
+    annotated = annotator.merge_annotations(parsed)
 
     assert "fasta_validation" in verified.parsed.levels["peptide"].varm
     assert verified.parsed.levels["protein"].varm == {}
@@ -149,25 +146,72 @@ def test_operations_run_independently() -> None:
 
 
 def test_operations_compose_in_memory() -> None:
-    verified = FastaAnnotationParser(_parsed(), _proteins()).verify_peptides()
+    annotator = FastaAnnotator(_proteins())
+    verified = annotator.verify_peptides(_parsed())
 
-    complete = FastaAnnotationParser(verified.parsed, _proteins()).merge_annotations()
+    complete = annotator.merge_annotations(verified.parsed)
 
     assert "fasta_validation" in complete.parsed.levels["peptide"].varm
     assert "fasta" in complete.parsed.levels["protein"].varm
     metadata = complete.parsed.metadata["fasta"]
     assert isinstance(metadata, dict)
-    assert set(metadata) == {
-        "schema_version",
-        "peptide_verification",
-        "protein_annotation",
-    }
+    assert set(metadata) == {"schema_version", "provenance"}
+    assert isinstance(metadata["provenance"], dict)
+    assert set(metadata["provenance"]) == {"peptide_verification", "protein_annotation"}
+
+
+def test_annotate_equals_explicit_composition() -> None:
+    parsed = _parsed()
+    annotator = FastaAnnotator(_proteins())
+
+    combined = annotator.annotate(parsed)
+    verified = annotator.verify_peptides(parsed)
+    explicit = annotator.merge_annotations(verified.parsed)
+
+    assert combined.reports.peptide_levels == verified.reports.peptide_levels
+    assert combined.reports.protein_groups == explicit.reports.protein_groups
+    assert combined.parsed.metadata == explicit.parsed.metadata
+    assert (
+        combined.parsed.levels["peptide"]
+        .varm["fasta_validation"]
+        .equals(explicit.parsed.levels["peptide"].varm["fasta_validation"])
+    )
+    assert (
+        combined.parsed.levels["protein"]
+        .varm["fasta"]
+        .equals(explicit.parsed.levels["protein"].varm["fasta"])
+    )
+    combined_members = combined.parsed.annotation_tables["fasta_protein_group_members"]
+    explicit_members = explicit.parsed.annotation_tables["fasta_protein_group_members"]
+    assert combined_members.frame.equals(explicit_members.frame)
+    combined_relation = combined.parsed.feature_relations["fasta_protein_group_membership"]
+    explicit_relation = explicit.parsed.feature_relations["fasta_protein_group_membership"]
+    assert combined_relation.coordinates.equals(explicit_relation.coordinates)
+
+
+def test_one_annotator_processes_independent_results() -> None:
+    annotator = FastaAnnotator(_proteins())
+    first_input = _parsed()
+    second_input = _parsed()
+
+    first = annotator.verify_peptides(first_input)
+    second = annotator.verify_peptides(second_input)
+
+    assert first.parsed is not second.parsed
+    assert (
+        first.parsed.levels["peptide"]
+        .varm["fasta_validation"]
+        .equals(second.parsed.levels["peptide"].varm["fasta_validation"])
+    )
+    assert first_input.levels["peptide"].varm == {}
+    assert second_input.levels["peptide"].varm == {}
 
 
 def test_operations_compose_in_reverse_order() -> None:
-    annotated = FastaAnnotationParser(_parsed(), _proteins()).merge_annotations()
+    annotator = FastaAnnotator(_proteins())
+    annotated = annotator.merge_annotations(_parsed())
 
-    complete = FastaAnnotationParser(annotated.parsed, _proteins()).verify_peptides()
+    complete = annotator.verify_peptides(annotated.parsed)
 
     assert "fasta_validation" in complete.parsed.levels["peptide"].varm
     assert "fasta" in complete.parsed.levels["protein"].varm
@@ -178,7 +222,7 @@ def test_annotated_result_round_trips_through_multilevel_formats(
     suffix: str,
     tmp_path: Path,
 ) -> None:
-    result = FastaAnnotationParser(_parsed(), _proteins()).run().parsed
+    result = FastaAnnotator(_proteins()).annotate(_parsed()).parsed
     target = tmp_path / f"annotated{suffix}"
 
     write_parsed_levels(result, target)
@@ -194,7 +238,7 @@ def test_annotated_result_round_trips_through_multilevel_formats(
 def test_peptide_only_annotation_round_trips_through_h5ad(tmp_path: Path) -> None:
     parsed = _parsed()
     peptide_only = ParsedLevels(levels={"peptide": parsed.levels["peptide"]}, uns={})
-    result = FastaAnnotationParser(peptide_only, _proteins()).verify_peptides().parsed
+    result = FastaAnnotator(_proteins()).verify_peptides(peptide_only).parsed
     target = tmp_path / "annotated.h5ad"
 
     write_parsed_levels(result, target)
@@ -205,27 +249,25 @@ def test_peptide_only_annotation_round_trips_through_h5ad(tmp_path: Path) -> Non
     assert restored.feature_relations == {}
 
 
-def test_parser_rejects_owned_output_collisions() -> None:
+def test_annotator_rejects_owned_output_collisions() -> None:
     parsed = _parsed()
     parsed.levels["peptide"].varm["fasta_validation"] = pl.DataFrame({"old": [1, 2, 3]})
 
     with pytest.raises(FastaAnnotationError, match="already contains"):
-        FastaAnnotationParser(parsed, _proteins()).verify_peptides()
+        FastaAnnotator(_proteins()).verify_peptides(parsed)
 
 
-def test_parser_rejects_repeating_an_applied_operation() -> None:
-    verified = FastaAnnotationParser(_parsed(), _proteins()).verify_peptides()
+def test_annotator_rejects_repeating_an_applied_operation() -> None:
+    annotator = FastaAnnotator(_proteins())
+    verified = annotator.verify_peptides(_parsed())
 
     with pytest.raises(FastaAnnotationError, match="peptide_verification"):
-        FastaAnnotationParser(verified.parsed, _proteins()).verify_peptides()
+        annotator.verify_peptides(verified.parsed)
 
 
-def test_parser_requires_protein_fasta_database_schema() -> None:
+def test_constructor_requires_protein_fasta_database_schema() -> None:
     with pytest.raises(FastaAnnotationError, match="missing required columns"):
-        FastaAnnotationParser(
-            _parsed(),
-            _proteins().drop("fasta_source_checksum"),
-        ).verify_peptides()
+        FastaAnnotator(_proteins().drop("fasta_source_checksum"))
 
 
 @pytest.mark.parametrize(

@@ -6,12 +6,12 @@ import sys
 from pathlib import Path
 from typing import Literal
 
-from apb2.result_facade import read_parsed_levels, write_parsed_levels
+from apb2.api import read_parsed_levels, write_parsed_levels
 from cyclopts import App
 from loguru import logger
 from protein_fasta.frame import ProteinDatabase, ProteinFormat, refseq, uniprotkb
 
-from apb_fasta.annotation import FastaAnnotationParser, FastaAnnotationResult
+from apb_fasta.api import FastaAnnotationResult, FastaAnnotator
 from apb_fasta.configuration import FastaAnnotationParameters
 
 app = App(
@@ -38,10 +38,9 @@ def verify_peptides(
 ) -> int:
     """Verify stripped peptide sequences in SOURCE against FASTA_PATHS."""
     try:
-        parser = _parser_for(
-            source,
+        _require_new_target(source, output)
+        annotator = _annotator_for(
             fasta_paths,
-            output=output,
             formats=formats,
             parameters=FastaAnnotationParameters(
                 protein_group_separator=protein_group_separator,
@@ -49,7 +48,7 @@ def verify_peptides(
                 il_equivalent=il_equivalent,
             ),
         )
-        result = parser.verify_peptides()
+        result = annotator.verify_peptides(read_parsed_levels(source))
         _write_result(result, output)
         _report_peptide_verification(result)
     except (OSError, ValueError) as error:
@@ -69,16 +68,15 @@ def merge_annotations(
 ) -> int:
     """Merge FASTA annotations into the reported protein groups in SOURCE."""
     try:
-        parser = _parser_for(
-            source,
+        _require_new_target(source, output)
+        annotator = _annotator_for(
             fasta_paths,
-            output=output,
             formats=formats,
             parameters=FastaAnnotationParameters(
                 protein_group_separator=protein_group_separator,
             ),
         )
-        result = parser.merge_annotations()
+        result = annotator.merge_annotations(read_parsed_levels(source))
         _write_result(result, output)
         _report_protein_annotations(result)
     except (OSError, ValueError) as error:
@@ -100,10 +98,9 @@ def run(
 ) -> int:
     """Verify peptides and merge protein annotations in one in-memory run."""
     try:
-        parser = _parser_for(
-            source,
+        _require_new_target(source, output)
+        annotator = _annotator_for(
             fasta_paths,
-            output=output,
             formats=formats,
             parameters=FastaAnnotationParameters(
                 protein_group_separator=protein_group_separator,
@@ -111,7 +108,7 @@ def run(
                 il_equivalent=il_equivalent,
             ),
         )
-        result = parser.run()
+        result = annotator.annotate(read_parsed_levels(source))
         _write_result(result, output)
         _report_peptide_verification(result)
         _report_protein_annotations(result)
@@ -122,31 +119,28 @@ def run(
     return 0
 
 
-def _parser_for(
-    source: Path,
+def _annotator_for(
     fasta_paths: tuple[Path, ...],
     /,
     *,
-    output: Path,
     formats: tuple[str, ...],
     parameters: FastaAnnotationParameters,
-) -> FastaAnnotationParser:
+) -> FastaAnnotator:
     if not fasta_paths:
         raise ValueError("at least one FASTA path is required")
-    if output == source:
-        raise ValueError("output must differ from source")
-    if output.exists():
-        raise ValueError(f"output already exists: {output}")
     unknown = tuple(name for name in formats if name not in _FORMATS)
     if unknown:
         raise ValueError(f"unknown protein format(s): {unknown}")
     protein_database = ProteinDatabase(*(_FORMATS[name] for name in formats))
     proteins = protein_database.parse(fasta_paths)
-    return FastaAnnotationParser(
-        read_parsed_levels(source),
-        proteins,
-        parameters=parameters,
-    )
+    return FastaAnnotator(proteins, parameters=parameters)
+
+
+def _require_new_target(source: Path, target: Path, /) -> None:
+    if source.resolve() == target.resolve():
+        raise ValueError("output must differ from source")
+    if target.exists():
+        raise ValueError(f"output already exists: {target}")
 
 
 def _write_result(result: FastaAnnotationResult, output: Path) -> None:

@@ -16,18 +16,18 @@
 ```mermaid
 graph TD
     cli[cli.py]
-    annotation[annotation.py]
+    api[api.py]
     integration[integration.py]
     config[configuration.py / errors.py]
     calculation[calculation/]
 
-    cli --> annotation
-    annotation --> integration
+    cli --> api
+    api --> integration
     integration --> config
     config --> calculation
 ```
 
-- `annotation.py` — the public dataset-and-protein-bound lifecycle: `FastaAnnotationParser` and `FastaAnnotationResult`
+- `api.py` — the public protein-bound lifecycle: `FastaAnnotator` and `FastaAnnotationResult`
 - `integration.py` — the **only** module that reads or writes APB2 result values; extracts inputs, validates output names, and builds the deep replacement
 - `calculation/` — pure Polars in, pure Polars out; imports no APB2 and no storage framework
 - `configuration.py` / `errors.py` — user-selected behavior and the single expected-failure type
@@ -37,7 +37,7 @@ graph TD
 
 The layering above is a checked contract, not a convention. [`.importlinter`](https://github.com/anndata-omics-bridge/apb-fasta/blob/main/.importlinter) declares it:
 
-- an exhaustive `layers` contract over `cli → annotation → integration → configuration | errors → calculation`
+- an exhaustive `layers` contract over `cli → api → integration → configuration | errors → calculation`
 - a `forbidden` contract stopping `apb_fasta.calculation` from importing `apb2`, `anndata`, `mudata`, or `pandas`
 
 `make architecture` runs `lint-imports` and is part of `make check`, so an upward or sideways import fails the build.
@@ -48,4 +48,4 @@ Keeping `calculation/` free of APB2 and storage types means the matching and pro
 
 ## Immutability
 
-`FastaAnnotationParser` is a frozen dataclass; so are the parameters, the result, and every report. Each operation deep-copies the input result and validates every output name before writing anything. A refused operation leaves the input untouched.
+`FastaAnnotator` validates and binds its protein frame at construction, then accepts each canonical APB2 result explicitly. The parameters, result, and every report are frozen data values. Each operation deep-copies its input result and validates every output name before writing anything. A refused operation leaves the input untouched.

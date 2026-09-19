@@ -18,21 +18,21 @@ Load the APB2 result and parse the protein database once:
 ```python
 from pathlib import Path
 
-from apb2.result_facade import read_parsed_levels, write_parsed_levels
-from apb_fasta.annotation import FastaAnnotationParser
+from apb2.api import read_parsed_levels, write_parsed_levels
+from apb_fasta.api import FastaAnnotator
 from protein_fasta.frame import ProteinDatabase, refseq, uniprotkb
 
 proteins = ProteinDatabase(uniprotkb, refseq).parse(
     (Path("human.fasta"), Path("contaminants.fasta"))
 )
-anndata = read_parsed_levels(Path("input.h5mu"))
-parser = FastaAnnotationParser(anndata, proteins)
+parsed = read_parsed_levels(Path("input.h5mu"))
+annotator = FastaAnnotator(proteins)
 ```
 
 Verify peptides only:
 
 ```python
-verified = parser.verify_peptides()
+verified = annotator.verify_peptides(parsed)
 print(verified.reports.peptide_levels)
 write_parsed_levels(verified.parsed, Path("verified.h5mu"))
 ```
@@ -40,7 +40,7 @@ write_parsed_levels(verified.parsed, Path("verified.h5mu"))
 Merge protein annotations only:
 
 ```python
-annotated = parser.merge_annotations()
+annotated = annotator.merge_annotations(parsed)
 print(annotated.reports.protein_groups)
 write_parsed_levels(annotated.parsed, Path("annotated.h5mu"))
 ```
@@ -48,18 +48,18 @@ write_parsed_levels(annotated.parsed, Path("annotated.h5mu"))
 Apply both operations in memory:
 
 ```python
-complete = parser.run()
+complete = annotator.annotate(parsed)
 write_parsed_levels(complete.parsed, Path("complete.h5mu"))
 ```
 
 The operations can also be chained explicitly without an intermediate file:
 
 ```python
-verified = parser.verify_peptides()
-complete = FastaAnnotationParser(verified.parsed, proteins).merge_annotations()
+verified = annotator.verify_peptides(parsed)
+complete = annotator.merge_annotations(verified.parsed)
 ```
 
-Every method returns an immutable `FastaAnnotationResult` containing the replacement APB2 `ParsedLevels` value and typed operation reports. `apb_fasta` neither opens result files nor receives raw AnnData or MuData objects.
+The annotator validates and binds the reusable protein frame once. Every method accepts one canonical `ParsedLevels` value and returns an immutable `FastaAnnotationResult` containing its replacement plus typed operation reports. `apb_fasta` neither opens result files nor receives raw AnnData or MuData objects.
 
 ## CLI
 

@@ -7,15 +7,15 @@ Both operations need the same two inputs: an APB2 result and a parsed protein da
 ```python
 from pathlib import Path
 
-from apb2.result_facade import read_parsed_levels, write_parsed_levels
-from apb_fasta.annotation import FastaAnnotationParser
+from apb2.api import read_parsed_levels, write_parsed_levels
+from apb_fasta.api import FastaAnnotator
 from protein_fasta.frame import ProteinDatabase, refseq, uniprotkb
 
 proteins = ProteinDatabase(uniprotkb, refseq).parse(
     (Path("human.fasta"), Path("contaminants.fasta"))
 )
-anndata = read_parsed_levels(Path("input.h5mu"))
-parser = FastaAnnotationParser(anndata, proteins)
+parsed = read_parsed_levels(Path("input.h5mu"))
+annotator = FastaAnnotator(proteins)
 ```
 
 The protein frame is parsed once and reused by every operation. Header formats are supplied in priority order.
@@ -23,7 +23,7 @@ The protein frame is parsed once and reused by every operation. Header formats a
 ## Verify peptides only
 
 ```python
-verified = parser.verify_peptides()
+verified = annotator.verify_peptides(parsed)
 print(verified.reports.peptide_levels)
 write_parsed_levels(verified.parsed, Path("verified.h5mu"))
 ```
@@ -33,7 +33,7 @@ Verification covers every peptide-derived level that carries APB2's canonical `P
 ## Merge protein annotations only
 
 ```python
-annotated = parser.merge_annotations()
+annotated = annotator.merge_annotations(parsed)
 print(annotated.reports.protein_groups)
 write_parsed_levels(annotated.parsed, Path("annotated.h5mu"))
 ```
@@ -43,15 +43,15 @@ Annotation reads the protein axis and the FASTA-accession column role APB2 persi
 ## Apply both
 
 ```python
-complete = parser.run()
+complete = annotator.annotate(parsed)
 write_parsed_levels(complete.parsed, Path("complete.h5mu"))
 ```
 
-`run` chains the two operations in memory and returns both reports. Chaining them by hand is equivalent:
+`annotate` chains the two operations in memory and returns both reports. Chaining them by hand is equivalent:
 
 ```python
-verified = parser.verify_peptides()
-complete = FastaAnnotationParser(verified.parsed, proteins).merge_annotations()
+verified = annotator.verify_peptides(parsed)
+complete = annotator.merge_annotations(verified.parsed)
 ```
 
 ## Configuration
@@ -64,7 +64,7 @@ parameters = FastaAnnotationParameters(
     matcher_backend="auto",
     il_equivalent=False,
 )
-parser = FastaAnnotationParser(anndata, proteins, parameters=parameters)
+annotator = FastaAnnotator(proteins, parameters=parameters)
 ```
 
 | Parameter | Default | Meaning |

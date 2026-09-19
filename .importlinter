@@ -11,7 +11,7 @@ containers =
 exhaustive = True
 layers =
     cli
-    annotation
+    api
     integration
     configuration | errors
     calculation

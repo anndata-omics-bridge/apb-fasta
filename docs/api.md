@@ -2,7 +2,7 @@
 
 ## Annotation lifecycle
 
-::: apb_fasta.annotation
+::: apb_fasta.api
 
 ## Configuration
 

@@ -139,12 +139,7 @@ def apply_peptide_matches(
         result.levels[level_name].varm[FASTA_VALIDATION_NAME] = match.summary.clone()
         level_metadata = result.levels[level_name].metadata
         level_metadata["fasta"] = {
-            PEPTIDE_VERIFICATION_OPERATION: {
-                **cast(dict[str, JsonValue], asdict(match.coverage)),
-                "requested_backend": requested_backend,
-                "resolved_backend": resolved_backend,
-                **protein_metadata,
-            }
+            PEPTIDE_VERIFICATION_OPERATION: cast(dict[str, JsonValue], asdict(match.coverage))
         }
     _record_operation_metadata(
         result,
@@ -232,7 +227,10 @@ def _validate_operation_metadata(parsed: ParsedLevels, operation: str) -> None:
         return
     if not isinstance(metadata, dict):
         raise FastaAnnotationError("result metadata 'fasta' section is not an object")
-    if operation in metadata:
+    provenance = metadata.get("provenance", {})
+    if not isinstance(provenance, dict):
+        raise FastaAnnotationError("result FASTA provenance is not an object")
+    if operation in provenance:
         raise FastaAnnotationError(f"result already contains FASTA operation {operation!r}")
 
 
@@ -244,10 +242,13 @@ def _record_operation_metadata(
     existing = parsed.metadata.get("fasta")
     metadata: dict[str, JsonValue]
     if existing is None:
-        metadata = {"schema_version": "1"}
+        metadata = {"schema_version": "2", "provenance": {}}
     else:
         metadata = cast(dict[str, JsonValue], deepcopy(existing))
-    metadata[operation] = operation_metadata
+    provenance = metadata.setdefault("provenance", {})
+    if not isinstance(provenance, dict):
+        raise FastaAnnotationError("result FASTA provenance is not an object")
+    provenance[operation] = operation_metadata
     parsed.metadata["fasta"] = metadata
 
 

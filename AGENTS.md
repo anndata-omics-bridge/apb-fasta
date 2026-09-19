@@ -19,7 +19,7 @@ The closest `AGENTS.md` wins. Explicit user instructions override this file.
 
 ## Architecture
 
-- `annotation.py` owns the public dataset-and-protein-bound lifecycle.
+- `api.py` owns the public protein-bound lifecycle; each operation accepts its APB2 result explicitly.
 - `integration.py` is the only module that translates or updates APB2 result values.
 - `calculation/` accepts and returns ordinary Polars values and imports no APB2 or storage framework.
 - `cli.py` only composes `protein_fasta`, APB2 result I/O, and the public annotation lifecycle.

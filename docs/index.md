@@ -11,7 +11,7 @@ FASTA verification and protein annotation for [APB2](https://anndata-omics-bridg
 | `verify_peptides` | Confirms every modification-stripped peptide sequence occurs in the supplied FASTA database |
 | `merge_annotations` | Merges FASTA annotations for every reported protein-group member, without collapsing the group to its leading accession |
 
-Each operation is independently callable and independently persistable. `run` applies both in memory without an intermediate file.
+Each operation is independently callable and independently persistable. `FastaAnnotator.annotate()` applies both in memory without an intermediate file; the CLI retains the concise `run` command.
 
 Protein inference with Prozor is the planned third operation. It will remain explicit and opt-in.
 
