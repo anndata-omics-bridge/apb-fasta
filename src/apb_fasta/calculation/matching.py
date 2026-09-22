@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -37,148 +36,178 @@ def match_peptide_levels(
     protein_group_separator: str,
 ) -> dict[str, PeptideLevelMatch]:
     """Match distinct normalized peptides once and summarize every source feature."""
-    prepared = {
-        name: tuple(
-            _normalize_sequence(value, il_equivalent)
-            for value in level.frame[level.sequence_column]
-        )
-        for name, level in levels.items()
-    }
-    peptides = tuple(
-        dict.fromkeys(
-            peptide for values in prepared.values() for peptide in values if peptide is not None
-        )
+    if not levels:
+        return {}
+    prepared = {name: _prepare_features(level, il_equivalent) for name, level in levels.items()}
+    peptides = (
+        pl.concat([frame.select("peptide") for frame in prepared.values()])
+        .drop_nulls()
+        .unique(maintain_order=True)
     )
-    protein_rows = proteins.to_dicts()
     records = tuple(
         _ProteinRecord(
             id=str(index),
-            sequence=_equivalent_sequence(_required_text(row, "sequence"), il_equivalent),
+            sequence=_protein_sequence(value, il_equivalent),
         )
-        for index, row in enumerate(protein_rows)
+        for index, value in enumerate(proteins.get_column("sequence"))
     )
-    matched = annotate_peptides_streaming(peptides, records, backend=backend)
-    occurrences: dict[str, list[int]] = defaultdict(list)
-    site_counts: dict[str, int] = defaultdict(int)
-    for match in matched:
-        record_index = int(match.protein_id)
-        occurrences[match.peptide].append(record_index)
-        site_counts[match.peptide] += 1
-    aliases = _protein_aliases(protein_rows)
+    matched = annotate_peptides_streaming(
+        peptides.get_column("peptide").to_list(), records, backend=backend
+    )
+    occurrences = pl.DataFrame(
+        [(match.peptide, int(match.protein_id)) for match in matched],
+        schema={"peptide": pl.String, "record": pl.UInt32},
+        orient="row",
+    )
+    site_counts = occurrences.group_by("peptide").agg(
+        pl.len().cast(pl.UInt64).alias("fasta_match_site_count")
+    )
+    indexed = (
+        proteins.with_columns(_text_column(proteins, "id").alias("id"))
+        .select("id")
+        .with_row_index("record")
+    )
+    distinct = occurrences.unique(maintain_order=True).join(
+        indexed, on="record", how="left", maintain_order="left"
+    )
+    if distinct.get_column("id").null_count():
+        raise ValueError("protein frame column 'id' contains a non-text value")
+    matches = distinct.group_by("peptide", maintain_order=True).agg(
+        pl.col("record").alias("matched_records"),
+        pl.len().cast(pl.UInt64).alias("fasta_matching_protein_count"),
+        pl.col("id").str.join(";").alias("fasta_matching_protein_ids"),
+    )
+    matches = matches.join(site_counts, on="peptide", how="left")
+    assignments = _reported_assignments(prepared, proteins, protein_group_separator)
     return {
-        name: _level_match(
-            level,
-            prepared[name],
-            protein_rows,
-            occurrences,
-            site_counts,
-            aliases,
-            protein_group_separator,
-        )
-        for name, level in levels.items()
+        name: _level_match(frame, matches, assignments, levels[name].accession_column is not None)
+        for name, frame in prepared.items()
     }
 
 
-def _level_match(
-    level: PeptideLevelInput,
-    peptides: tuple[str | None, ...],
-    protein_rows: list[dict[str, object]],
-    occurrences: Mapping[str, list[int]],
-    site_counts: Mapping[str, int],
-    aliases: Mapping[str, tuple[int, ...]],
-    separator: str,
-) -> PeptideLevelMatch:
+def _text_column(frame: pl.DataFrame, column: str | None) -> pl.Expr:
+    if column is None:
+        return pl.lit(None, dtype=pl.String)
+    dtype = frame.schema[column]
+    if isinstance(dtype, (pl.String, pl.Categorical, pl.Enum)):
+        return pl.col(column).cast(pl.String)
+    if dtype == pl.Object:
+        # Only foreign mixed-object columns need scalar type checking.
+        return pl.col(column).map_elements(_optional_text, return_dtype=pl.String)
+    return pl.lit(None, dtype=pl.String)
+
+
+def _optional_text(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _prepare_features(level: PeptideLevelInput, il_equivalent: bool) -> pl.DataFrame:
+    sequence = _text_column(level.frame, level.sequence_column).str.strip_chars().str.to_uppercase()
+    if il_equivalent:
+        sequence = sequence.str.replace_all("I", "L", literal=True)
+    # with_columns keeps the source height even when both expressions are scalar nulls.
+    return level.frame.with_columns(
+        sequence.alias("peptide"),
+        _text_column(level.frame, level.accession_column).alias("assignment"),
+    ).select(
+        pl.when(pl.col("peptide") != "").then(pl.col("peptide")).alias("peptide"),
+        "assignment",
+    )
+
+
+def _reported_assignments(
+    prepared: Mapping[str, pl.DataFrame], proteins: pl.DataFrame, separator: str
+) -> pl.DataFrame:
+    aliases = pl.concat(
+        [
+            proteins.with_columns(_text_column(proteins, column).alias("member"))
+            .select("member")
+            .with_row_index("record")
+            for column in ("id", "accession")
+            if column in proteins.columns
+        ]
+    )
+    aliases = (
+        aliases.filter(pl.col("member").is_not_null() & (pl.col("member") != ""))
+        .unique()
+        .group_by("member")
+        .agg("record")
+    )
     assignments = (
-        level.frame.get_column(level.accession_column).to_list()
-        if level.accession_column is not None
-        else [None] * level.frame.height
+        pl.concat([frame.select("assignment") for frame in prepared.values()]).drop_nulls().unique()
     )
-    rows: list[dict[str, object]] = []
-    for peptide, assignment in zip(peptides, assignments, strict=True):
-        record_indices = tuple(dict.fromkeys(occurrences.get(peptide or "", ())))
-        reported = _members(assignment, separator) if level.accession_column is not None else None
-        reported_records = _matching_records(reported or (), aliases)
-        rows.append(
-            {
-                "peptide_in_fasta": bool(record_indices),
-                "fasta_match_site_count": site_counts.get(peptide or "", 0),
-                "fasta_matching_protein_count": len(record_indices),
-                "fasta_matching_protein_ids": ";".join(
-                    _required_text(protein_rows[index], "id") for index in record_indices
-                ),
-                "reported_member_count": None if reported is None else len(reported),
-                "reported_members_in_fasta_count": (
-                    None
-                    if reported is None
-                    else sum(bool(aliases.get(member)) for member in reported)
-                ),
-                "peptide_in_reported_protein": (
-                    None
-                    if reported is None
-                    else bool(set(record_indices).intersection(reported_records))
-                ),
-            }
+    return (
+        assignments.with_columns(
+            pl.col("assignment")
+            .str.split(separator)
+            .list.eval(pl.element().str.strip_chars())
+            .alias("member")
         )
-    summary = pl.DataFrame(
-        rows,
-        schema={
-            "peptide_in_fasta": pl.Boolean,
-            "fasta_match_site_count": pl.UInt64,
-            "fasta_matching_protein_count": pl.UInt64,
-            "fasta_matching_protein_ids": pl.String,
-            "reported_member_count": pl.UInt64,
-            "reported_members_in_fasta_count": pl.UInt64,
-            "peptide_in_reported_protein": pl.Boolean,
-        },
+        .explode("member", empty_as_null=True)
+        .filter(pl.col("member") != "")
+        .join(aliases, on="member", how="left")
+        .group_by("assignment")
+        .agg(
+            pl.len().cast(pl.UInt64).alias("reported_member_count"),
+            pl.col("record")
+            .is_not_null()
+            .sum()
+            .cast(pl.UInt64)
+            .alias("reported_members_in_fasta_count"),
+            pl.col("record")
+            .explode(empty_as_null=True)
+            .drop_nulls()
+            .unique()
+            .alias("reported_records"),
+        )
     )
-    matched_count = summary.get_column("peptide_in_fasta").sum() or 0
+
+
+def _level_match(
+    features: pl.DataFrame,
+    matches: pl.DataFrame,
+    assignments: pl.DataFrame,
+    has_assignment: bool,
+) -> PeptideLevelMatch:
+    joined = features.join(matches, on="peptide", how="left", maintain_order="left").join(
+        assignments, on="assignment", how="left", maintain_order="left"
+    )
+    summary = joined.select(
+        (pl.col("fasta_matching_protein_count").fill_null(0) > 0).alias("peptide_in_fasta"),
+        pl.col("fasta_match_site_count").fill_null(0),
+        pl.col("fasta_matching_protein_count").fill_null(0),
+        pl.col("fasta_matching_protein_ids").fill_null(""),
+        pl.col("reported_member_count").fill_null(0),
+        pl.col("reported_members_in_fasta_count").fill_null(0),
+        (
+            pl.col("matched_records")
+            .fill_null([])
+            .list.set_intersection(pl.col("reported_records").fill_null([]))
+            .list.len()
+            > 0
+        ).alias("peptide_in_reported_protein"),
+    )
+    if not has_assignment:
+        summary = summary.with_columns(
+            pl.lit(None, dtype=pl.UInt64).alias("reported_member_count"),
+            pl.lit(None, dtype=pl.UInt64).alias("reported_members_in_fasta_count"),
+            pl.lit(None, dtype=pl.Boolean).alias("peptide_in_reported_protein"),
+        )
+    unique = joined.select("peptide", "fasta_match_site_count").drop_nulls("peptide").unique()
+    matched_count = int(summary.get_column("peptide_in_fasta").sum() or 0)
     return PeptideLevelMatch(
         summary=summary,
         coverage=PeptideCoverage(
-            feature_count=len(peptides),
-            unique_sequence_count=len({value for value in peptides if value is not None}),
-            matched_feature_count=int(matched_count),
-            unmatched_feature_count=len(peptides) - int(matched_count),
-            match_site_count=sum(site_counts.get(value or "", 0) for value in set(peptides)),
+            feature_count=features.height,
+            unique_sequence_count=unique.height,
+            matched_feature_count=matched_count,
+            unmatched_feature_count=features.height - matched_count,
+            match_site_count=int(unique.get_column("fasta_match_site_count").sum() or 0),
         ),
     )
 
 
-def _protein_aliases(rows: list[dict[str, object]]) -> dict[str, tuple[int, ...]]:
-    collected: dict[str, list[int]] = defaultdict(list)
-    for index, row in enumerate(rows):
-        for column in ("id", "accession"):
-            value = row.get(column)
-            if isinstance(value, str) and value:
-                collected[value].append(index)
-    return {name: tuple(indices) for name, indices in collected.items()}
-
-
-def _matching_records(
-    members: tuple[str, ...],
-    aliases: Mapping[str, tuple[int, ...]],
-) -> set[int]:
-    return {index for member in members for index in aliases.get(member, ())}
-
-
-def _members(value: object, separator: str) -> tuple[str, ...]:
+def _protein_sequence(value: object, il_equivalent: bool) -> str:
     if not isinstance(value, str):
-        return ()
-    return tuple(token.strip() for token in value.split(separator) if token.strip())
-
-
-def _normalize_sequence(value: object, il_equivalent: bool) -> str | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    return _equivalent_sequence(value.strip().upper(), il_equivalent)
-
-
-def _equivalent_sequence(value: str, enabled: bool) -> str:
-    return value.replace("I", "L") if enabled else value
-
-
-def _required_text(row: Mapping[str, object], column: str) -> str:
-    value = row.get(column)
-    if not isinstance(value, str):
-        raise ValueError(f"protein frame column {column!r} contains a non-text value")
-    return value
+        raise ValueError("protein frame column 'sequence' contains a non-text value")
+    return value.replace("I", "L") if il_equivalent else value

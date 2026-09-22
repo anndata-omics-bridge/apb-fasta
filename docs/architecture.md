@@ -46,6 +46,14 @@ The layering above is a checked contract, not a convention. [`.importlinter`](ht
 
 Keeping `calculation/` free of APB2 and storage types means the matching and protein-group logic is testable against plain frames, and a change to APB2's result layout touches exactly one module — `integration.py`.
 
+## Verification execution
+
+Peptide verification normalizes feature sequences with Polars, searches distinct peptides across all levels once through Prozor, and uses native grouping and ordered joins to expand the results back to each feature axis. Reported protein assignments are split and resolved once per distinct assignment, rather than once per feature. Only peptide strings and minimal protein records cross the matching boundary; the complete protein metadata frame is not converted into Python row dictionaries.
+
+Protein record identity is separate from the displayed identifier: two FASTA records with the same ID remain two matching proteins, and overlapping occurrences remain separate match sites. Repeated reported members retain their multiplicity. A missing assignment column produces null assignment diagnostics; an existing column with blank or missing values produces zero counts. Neither matching backend selection nor persisted output schemas change.
+
+Measure `verify_peptides` separately from input loading and output writing. Concurrent workflow jobs, protein database size and unique peptide count affect elapsed time; vendor input bytes alone do not describe verification cost.
+
 ## Immutability
 
 `FastaAnnotator` validates and binds its protein frame at construction, then accepts each canonical APB2 result explicitly. The parameters, result, and every report are frozen data values. Each operation deep-copies its input result and validates every output name before writing anything. A refused operation leaves the input untouched.
