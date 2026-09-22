@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: anndata-omics-bridge/apb2
-          ref: 3a7055870ad99b910b501b9747ff2e9ad0f55a61
+          ref: efa3c039e25f98e915cbd70780c04d20e4543876
           path: apb2
 
       - name: Check out compatible protein-fasta
