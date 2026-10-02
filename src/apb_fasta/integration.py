@@ -28,8 +28,10 @@ FASTA_VALIDATION_NAME = "fasta_validation"
 FASTA_SUMMARY_NAME = "fasta"
 MEMBER_TABLE_NAME = "fasta_protein_group_members"
 MEMBER_RELATION_NAME = "fasta_protein_group_membership"
+PEPTIDE_PROPERTIES_NAME = "peptide_properties"
 PEPTIDE_VERIFICATION_OPERATION = "peptide_verification"
 PROTEIN_ANNOTATION_OPERATION = "protein_annotation"
+PEPTIDE_PROPERTIES_OPERATION = "peptide_properties"
 _PEPTIDE_COLUMN = "ProForma_peptide"
 _RESERVED_MEMBER_COLUMNS = frozenset({"source_level", "member_ordinal", "match_ordinal"})
 
@@ -193,6 +195,31 @@ def apply_protein_group_match(
         peptide_levels={},
         protein_groups=match.coverage,
     )
+
+
+def apply_peptide_properties(
+    parsed: ParsedLevels,
+    properties: dict[str, pl.DataFrame],
+    /,
+    *,
+    protein_fasta_version: str,
+) -> ParsedLevels:
+    """Attach feature-aligned peptide properties to a deep replacement of the APB2 result."""
+    _validate_operation_metadata(parsed, PEPTIDE_PROPERTIES_OPERATION)
+    for name in properties:
+        if PEPTIDE_PROPERTIES_NAME in parsed.levels[cast(ParsedLevelName, name)].varm:
+            raise FastaAnnotationError(
+                f"level {name!r} already contains varm[{PEPTIDE_PROPERTIES_NAME!r}]"
+            )
+    result = deepcopy(parsed)
+    for name, frame in properties.items():
+        result.levels[cast(ParsedLevelName, name)].varm[PEPTIDE_PROPERTIES_NAME] = frame.clone()
+    _record_operation_metadata(
+        result,
+        PEPTIDE_PROPERTIES_OPERATION,
+        {"protein_fasta_version": protein_fasta_version},
+    )
+    return result
 
 
 def protein_frame_metadata(proteins: pl.DataFrame, /) -> dict[str, JsonValue]:

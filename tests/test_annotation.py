@@ -15,7 +15,7 @@ from apb2.result_facade import (
     VarFinal,
 )
 
-from apb_fasta.api import FastaAnnotator
+from apb_fasta.api import FastaAnnotator, add_peptide_properties
 from apb_fasta.cli import app
 from apb_fasta.errors import FastaAnnotationError
 
@@ -306,3 +306,70 @@ def test_cli_exposes_independent_and_combined_operations(
     restored = read_parsed_levels(output)
     assert ("fasta_validation" in restored.levels["peptide"].varm) is has_verification
     assert ("fasta" in restored.levels["protein"].varm) is has_annotations
+
+
+def test_peptide_properties_attach_to_peptide_levels_without_mutating_input() -> None:
+    source = _parsed()
+
+    result = add_peptide_properties(source)
+
+    assert source.levels["peptide"].varm == {}
+    assert "fasta" not in source.metadata
+    assert result.levels["protein"].varm == {}
+    properties = result.levels["peptide"].varm["peptide_properties"]
+    # "OTHER" contains pyrrolysine (O), so its properties are null.
+    assert properties.get_column("length").to_list() == [7, None, 7]
+    metadata = result.metadata["fasta"]
+    assert isinstance(metadata, dict)
+    provenance = metadata["provenance"]
+    assert isinstance(provenance, dict)
+    operation = provenance["peptide_properties"]
+    assert isinstance(operation, dict)
+    assert isinstance(operation["protein_fasta_version"], str)
+
+
+def test_peptide_properties_compose_with_fasta_annotation() -> None:
+    annotated = FastaAnnotator(_proteins()).annotate(_parsed()).parsed
+
+    complete = add_peptide_properties(annotated)
+
+    assert set(complete.levels["peptide"].varm) == {"fasta_validation", "peptide_properties"}
+    metadata = complete.metadata["fasta"]
+    assert isinstance(metadata, dict)
+    assert isinstance(metadata["provenance"], dict)
+    assert set(metadata["provenance"]) == {
+        "peptide_verification",
+        "protein_annotation",
+        "peptide_properties",
+    }
+
+
+def test_peptide_properties_refuse_a_second_application() -> None:
+    once = add_peptide_properties(_parsed())
+
+    with pytest.raises(FastaAnnotationError, match="already contains"):
+        add_peptide_properties(once)
+
+
+def test_peptide_properties_require_a_peptide_level() -> None:
+    protein_only = ParsedLevels(levels={"protein": _parsed().levels["protein"]}, uns={})
+
+    with pytest.raises(FastaAnnotationError, match="no peptide-derived level"):
+        add_peptide_properties(protein_only)
+
+
+@pytest.mark.parametrize("suffix", [".h5mu", ".parquet", ".duckdb"])
+def test_peptide_properties_round_trip_through_multilevel_formats(
+    suffix: str,
+    tmp_path: Path,
+) -> None:
+    result = add_peptide_properties(_parsed())
+    target = tmp_path / f"properties{suffix}"
+
+    write_parsed_levels(result, target)
+    restored = read_parsed_levels(target)
+
+    properties = restored.levels["peptide"].varm["peptide_properties"]
+    assert properties.get_column("length").to_list() == [7, None, 7]
+    assert properties.get_column("c_terminal_residue").to_list() == ["E", None, "G"]
+    assert properties.get_column("contains_tryptophan").to_list() == [False, None, False]

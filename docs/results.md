@@ -1,6 +1,6 @@
 # Result layout
 
-Both operations return a deep replacement of the APB2 result. Neither mutates its input, and both refuse to run when an output name already exists.
+Every operation returns a deep replacement of the APB2 result. None mutates its input, and each refuses to run when an output name already exists.
 
 ## Peptide verification
 
@@ -35,6 +35,10 @@ Writes three things:
 | `fasta_descriptions`, `fasta_gene_names`, `fasta_organism_names` | String |
 
 The member table keeps `protein_group`, `protein_member`, `member_ordinal`, `match_ordinal`, `match_status`, `fasta_id`, `fasta_description`, and `fasta_sequence_length`. A group is never collapsed to its leading accession — the group stays one row on the protein axis while every member keeps its own row in the annotation table.
+
+## Peptide properties
+
+`add_peptide_properties(parsed)` needs no FASTA. It writes a feature-aligned `varm["peptide_properties"]` table on every peptide-derived level, computed from `ProForma_peptide` by protein_fasta's `peptide_property_frame()`: length, average molecular weight, isoelectric point (EMBOSS), Kyte-Doolittle hydrophobicity, instability and Boman indices, charge at pH 7 (Sillero), predicted reversed-phase retention time (Goloborodko et al. 2010 coefficients), missed cleavages, proline count, C-terminal residue, and Cys/Met/Trp, N-terminal Q/E or Cys, NG and DP flags. The protein_fasta API reference lists the columns and their types. A feature without a sequence, or whose sequence has a residue outside the 20 standard amino acids, has null properties. The installed protein_fasta version is recorded under `fasta.provenance.peptide_properties`.
 
 ## Provenance
 

@@ -1,5 +1,7 @@
 # Changes
 
+- 2026-10-02: Added `add_peptide_properties(parsed)`, which writes a feature-aligned `varm["peptide_properties"]` with protein_fasta's sequence-derived peptide properties (length, mass, pI, hydrophobicity, instability and Boman indices, charge, predicted reversed-phase retention time, missed cleavages, motif flags) on every peptide-derived level, and records the protein_fasta version under `fasta.provenance.peptide_properties`. It is not part of `annotate()` or the CLI.
+
 - 2026-09-19: **Breaking:** Replaced dataset-bound `FastaAnnotationParser(parsed, proteins)` with reusable `FastaAnnotator(proteins)`. `verify_peptides(parsed)`, `merge_annotations(parsed)`, and `annotate(parsed)` now accept canonical APB2 values explicitly; the Python `run()` method and `apb_fasta.annotation` module were removed. CLI command names and scientific results are unchanged.
 
 - 2026-09-18: **Breaking:** FASTA metadata schema 2 moves root database sources and operation settings into `fasta.provenance`, grouped by operation. Per-level validation summaries and aligned tables are unchanged. APB2 stores the contributions on their owning objects and combines them only for standalone H5AD.
