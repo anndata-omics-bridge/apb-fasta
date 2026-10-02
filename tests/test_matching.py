@@ -56,6 +56,8 @@ def test_duplicate_records_sites_assignments_and_feature_order(
             "fasta_match_site_count": [4, 2, 0, 0, 3 if il_equivalent else 2, 1, 0, 4],
             "fasta_matching_protein_count": [2, 2, 0, 0, 2, 1, 0, 2],
             "fasta_matching_protein_ids": ["p1;p1", "p1;p1", "", "", "p1;p3", "p3", "", "p1;p1"],
+            "fasta_matching_organisms": [""] * 8,
+            "fasta_matches_contaminant": [False] * 8,
             "reported_member_count": [3, 1, 0, 0, 1, 1, 1, 0],
             "reported_members_in_fasta_count": [2, 1, 0, 0, 1, 1, 1, 0],
             "peptide_in_reported_protein": [True, True, False, False, True, True, False, False],
@@ -65,6 +67,8 @@ def test_duplicate_records_sites_assignments_and_feature_order(
             "fasta_match_site_count": pl.UInt64,
             "fasta_matching_protein_count": pl.UInt64,
             "fasta_matching_protein_ids": pl.String,
+            "fasta_matching_organisms": pl.String,
+            "fasta_matches_contaminant": pl.Boolean,
             "reported_member_count": pl.UInt64,
             "reported_members_in_fasta_count": pl.UInt64,
             "peptide_in_reported_protein": pl.Boolean,
@@ -72,6 +76,27 @@ def test_duplicate_records_sites_assignments_and_feature_order(
     )
     assert_frame_equal(result.summary, expected)
     assert result.coverage == PeptideCoverage(8, 5, 5, 3, 10 if il_equivalent else 9)
+
+
+def test_matched_organisms_and_contaminants_are_summarized_per_feature() -> None:
+    proteins = pl.DataFrame(
+        {
+            "id": ["sp|Cont_P1|X_BOVIN", "sp|P1|X_HUMAN", "sp|P2|Y_YEAST"],
+            "sequence": ["AAKK", "AAKR", "AAKR"],
+            "organism_mnemonic": ["BOVIN", "HUMAN", "YEAST"],
+            "is_contaminant": [True, False, False],
+        }
+    )
+    result = _match(
+        pl.DataFrame({"peptide": ["AAK", "AKR", "MM"]}), assignment=None, proteins=proteins
+    )
+
+    assert result.summary.get_column("fasta_matching_organisms").to_list() == [
+        "BOVIN;HUMAN;YEAST",
+        "HUMAN;YEAST",
+        "",
+    ]
+    assert result.summary.get_column("fasta_matches_contaminant").to_list() == [True, False, False]
 
 
 def test_absent_assignment_is_null_not_zero() -> None:

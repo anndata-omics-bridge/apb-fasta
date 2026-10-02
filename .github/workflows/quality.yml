@@ -24,14 +24,14 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: anndata-omics-bridge/apb2
-          ref: efa3c039e25f98e915cbd70780c04d20e4543876
+          ref: 8651e1fff4772e7c1c1fbb4efe754980799c342d
           path: apb2
 
       - name: Check out compatible protein-fasta
         uses: actions/checkout@v6
         with:
           repository: anndata-omics-bridge/protein-fasta
-          ref: d7630105a67b09e12d044443cf1d4c04cf04d44b
+          ref: bc3fd3609d910549e79049449aba376ad9ab547e
           path: protein_fasta
 
       - name: Check out compatible Prozor

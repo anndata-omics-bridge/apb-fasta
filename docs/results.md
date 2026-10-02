@@ -12,6 +12,8 @@ Writes a feature-aligned `varm["fasta_validation"]` table on every peptide-deriv
 | `fasta_match_site_count` | UInt64 | Total match sites across the database |
 | `fasta_matching_protein_count` | UInt64 | Distinct proteins containing the sequence |
 | `fasta_matching_protein_ids` | String | Separator-joined matching accessions |
+| `fasta_matching_organisms` | String | Sorted, `;`-joined organism mnemonics of the matching proteins, e.g. `HUMAN;YEAST` |
+| `fasta_matches_contaminant` | Boolean | A matching protein is a contaminant (`is_contaminant`) |
 | `reported_member_count` | UInt64 | Protein-group members the result reported |
 | `reported_members_in_fasta_count` | UInt64 | Reported members found in the database |
 | `peptide_in_reported_protein` | Boolean | The sequence occurs in a reported member |

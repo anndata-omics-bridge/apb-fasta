@@ -62,11 +62,14 @@ def match_peptide_levels(
     site_counts = occurrences.group_by("peptide").agg(
         pl.len().cast(pl.UInt64).alias("fasta_match_site_count")
     )
-    indexed = (
-        proteins.with_columns(_text_column(proteins, "id").alias("id"))
-        .select("id")
-        .with_row_index("record")
-    )
+    columns = set(proteins.columns)
+    indexed = proteins.select(
+        id=_text_column(proteins, "id"),
+        organism=_text_column(
+            proteins, "organism_mnemonic" if "organism_mnemonic" in columns else None
+        ),
+        is_contaminant=pl.col("is_contaminant") if "is_contaminant" in columns else pl.lit(False),
+    ).with_row_index("record")
     distinct = occurrences.unique(maintain_order=True).join(
         indexed, on="record", how="left", maintain_order="left"
     )
@@ -76,6 +79,8 @@ def match_peptide_levels(
         pl.col("record").alias("matched_records"),
         pl.len().cast(pl.UInt64).alias("fasta_matching_protein_count"),
         pl.col("id").str.join(";").alias("fasta_matching_protein_ids"),
+        fasta_matching_organisms=pl.col("organism").drop_nulls().unique().sort().str.join(";"),
+        fasta_matches_contaminant=pl.col("is_contaminant").any(),
     )
     matches = matches.join(site_counts, on="peptide", how="left")
     assignments = _reported_assignments(prepared, proteins, protein_group_separator)
@@ -177,6 +182,8 @@ def _level_match(
         pl.col("fasta_match_site_count").fill_null(0),
         pl.col("fasta_matching_protein_count").fill_null(0),
         pl.col("fasta_matching_protein_ids").fill_null(""),
+        pl.col("fasta_matching_organisms").fill_null(""),
+        pl.col("fasta_matches_contaminant").fill_null(False),
         pl.col("reported_member_count").fill_null(0),
         pl.col("reported_members_in_fasta_count").fill_null(0),
         (
