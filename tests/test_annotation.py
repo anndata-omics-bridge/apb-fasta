@@ -36,19 +36,21 @@ def _level(
     }
     return ParsedLevel(
         obs=ObsFinal(frame=pl.DataFrame({"Run": ["run1"]}), key_columns=("Run",)),
-        var=VarFinal(frame=var, key_columns=key_columns),
+        var=VarFinal(frame=var, key_columns=key_columns, roles=column_roles),
         primary_layer_name=layer_name,
         uns=uns,
         layers={
             layer_name: FinalLayerTable(
                 layer_name=layer_name,
-                var_key_columns=key_columns,
-                values=pl.DataFrame(
-                    {
-                        **{key: var.get_column(key) for key in key_columns},
-                        "obs_0": [float(index + 1) for index in range(var.height)],
-                    }
-                ),
+                values=(
+                    pl.DataFrame(
+                        {
+                            **{key: var.get_column(key) for key in key_columns},
+                            "obs_0": [float(index + 1) for index in range(var.height)],
+                        }
+                    )
+                ).drop(key_columns, strict=False),
+                semantic_roles=("abundance",),
             )
         },
         obsm={},

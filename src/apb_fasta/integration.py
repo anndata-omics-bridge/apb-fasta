@@ -11,7 +11,6 @@ from apb2.result_facade import (
     AnnotationTable,
     FeatureRelation,
     JsonValue,
-    ParsedLevelName,
     ParsedLevels,
 )
 
@@ -65,7 +64,7 @@ def peptide_inputs(parsed: ParsedLevels, /) -> dict[str, PeptideLevelInput]:
         result[name] = PeptideLevelInput(
             frame=level.var.frame,
             sequence_column=_PEPTIDE_COLUMN,
-            accession_column=_fasta_accession_column(level.uns, level.var.frame),
+            accession_column=_fasta_accession_column(level.var.roles, level.var.frame),
         )
     return result
 
@@ -75,7 +74,7 @@ def protein_group_input(parsed: ParsedLevels, /) -> ProteinGroupInput | None:
     level = parsed.levels.get("protein")
     if level is None:
         return None
-    accession_column = _fasta_accession_column(level.uns, level.var.frame)
+    accession_column = _fasta_accession_column(level.var.roles, level.var.frame)
     if accession_column is None:
         raise FastaAnnotationError("protein level does not declare column_roles.fasta_accessions")
     collisions = _RESERVED_MEMBER_COLUMNS.intersection(level.var.key_columns)
@@ -98,7 +97,7 @@ def validate_peptide_output_names(
     """Reject peptide-verification collisions before constructing a replacement."""
     _validate_operation_metadata(parsed, PEPTIDE_VERIFICATION_OPERATION)
     for name in matches:
-        level_name = cast(ParsedLevelName, name)
+        level_name = name
         if FASTA_VALIDATION_NAME in parsed.levels[level_name].varm:
             raise FastaAnnotationError(
                 f"level {name!r} already contains varm[{FASTA_VALIDATION_NAME!r}]"
@@ -137,7 +136,7 @@ def apply_peptide_matches(
     validate_peptide_output_names(parsed, matches)
     result = deepcopy(parsed)
     for name, match in matches.items():
-        level_name = cast(ParsedLevelName, name)
+        level_name = name
         result.levels[level_name].varm[FASTA_VALIDATION_NAME] = match.summary.clone()
         level_metadata = result.levels[level_name].metadata
         level_metadata["fasta"] = {
@@ -207,13 +206,13 @@ def apply_peptide_properties(
     """Attach feature-aligned peptide properties to a deep replacement of the APB2 result."""
     _validate_operation_metadata(parsed, PEPTIDE_PROPERTIES_OPERATION)
     for name in properties:
-        if PEPTIDE_PROPERTIES_NAME in parsed.levels[cast(ParsedLevelName, name)].varm:
+        if PEPTIDE_PROPERTIES_NAME in parsed.levels[name].varm:
             raise FastaAnnotationError(
                 f"level {name!r} already contains varm[{PEPTIDE_PROPERTIES_NAME!r}]"
             )
     result = deepcopy(parsed)
     for name, frame in properties.items():
-        result.levels[cast(ParsedLevelName, name)].varm[PEPTIDE_PROPERTIES_NAME] = frame.clone()
+        result.levels[name].varm[PEPTIDE_PROPERTIES_NAME] = frame.clone()
     _record_operation_metadata(
         result,
         PEPTIDE_PROPERTIES_OPERATION,
@@ -280,12 +279,9 @@ def _record_operation_metadata(
 
 
 def _fasta_accession_column(
-    uns: dict[str, JsonValue],
+    roles: dict[str, str],
     frame: pl.DataFrame,
 ) -> str | None:
-    roles = uns.get("column_roles")
-    if not isinstance(roles, dict):
-        return None
     value = roles.get("fasta_accessions")
     return value if isinstance(value, str) and value in frame.columns else None
 

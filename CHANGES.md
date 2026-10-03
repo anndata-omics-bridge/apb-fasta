@@ -1,5 +1,9 @@
 # Changes
 
+## 2026-10-03
+
+- Read FASTA-accession evidence from VarFinal.roles.
+
 - 2026-10-02: Added `add_peptide_properties(parsed)`, which writes a feature-aligned `varm["peptide_properties"]` with protein_fasta's sequence-derived peptide properties (length, mass, pI, hydrophobicity, instability and Boman indices, charge, predicted reversed-phase retention time, missed cleavages, motif flags) on every peptide-derived level, and records the protein_fasta version under `fasta.provenance.peptide_properties`. It is not part of `annotate()` or the CLI.
 
 - 2026-10-02: `varm["fasta_validation"]` gains `fasta_matching_organisms` (sorted, `;`-joined organism mnemonics of the matching proteins) and `fasta_matches_contaminant` (a matching protein has `is_contaminant`), taken from protein_fasta's parsed columns.
