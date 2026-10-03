@@ -2,6 +2,7 @@
 
 ## 2026-10-03
 
+- Peptide matching searches 10,000 protein sequences per Aho-Corasick call through prozor and builds no per-protein record objects; about 2.7 times faster on ProteoBench's 2.84 M-entry entrapment FASTA. FASTA_PATHS may instead be one protein-fasta database Parquet file (`protein-fasta database`), read about 70 times faster than parsing.
 - Read FASTA-accession evidence from VarFinal.roles.
 
 - 2026-10-02: Added `add_peptide_properties(parsed)`, which writes a feature-aligned `varm["peptide_properties"]` with protein_fasta's sequence-derived peptide properties (length, mass, pI, hydrophobicity, instability and Boman indices, charge, predicted reversed-phase retention time, missed cleavages, motif flags) on every peptide-derived level, and records the protein_fasta version under `fasta.provenance.peptide_properties`. It is not part of `annotate()` or the CLI.

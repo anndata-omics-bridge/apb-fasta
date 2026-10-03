@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 import polars as pl
-from prozor.matching.annotation import annotate_peptides_streaming
+from prozor.matching.annotation import annotate_peptides
 
 from apb_fasta.calculation.results import PeptideCoverage, PeptideLevelMatch
 
@@ -18,12 +18,6 @@ class PeptideLevelInput:
     frame: pl.DataFrame
     sequence_column: str
     accession_column: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class _ProteinRecord:
-    id: str
-    sequence: str
 
 
 def match_peptide_levels(
@@ -44,15 +38,16 @@ def match_peptide_levels(
         .drop_nulls()
         .unique(maintain_order=True)
     )
-    records = tuple(
-        _ProteinRecord(
-            id=str(index),
-            sequence=_protein_sequence(value, il_equivalent),
-        )
-        for index, value in enumerate(proteins.get_column("sequence"))
-    )
-    matched = annotate_peptides_streaming(
-        peptides.get_column("peptide").to_list(), records, backend=backend
+    sequence = _text_column(proteins, "sequence")
+    if il_equivalent:
+        sequence = sequence.str.replace_all("I", "L", literal=True)
+    sequences = proteins.select(sequence).to_series()
+    if sequences.null_count():
+        raise ValueError("protein frame column 'sequence' contains a non-text value")
+    matched = annotate_peptides(
+        peptides.get_column("peptide").to_list(),
+        dict(zip(map(str, range(sequences.len())), sequences.to_list(), strict=True)),
+        backend=backend,
     )
     occurrences = pl.DataFrame(
         [(match.peptide, int(match.protein_id)) for match in matched],
@@ -212,9 +207,3 @@ def _level_match(
             match_site_count=int(unique.get_column("fasta_match_site_count").sum() or 0),
         ),
     )
-
-
-def _protein_sequence(value: object, il_equivalent: bool) -> str:
-    if not isinstance(value, str):
-        raise ValueError("protein frame column 'sequence' contains a non-text value")
-    return value.replace("I", "L") if il_equivalent else value
