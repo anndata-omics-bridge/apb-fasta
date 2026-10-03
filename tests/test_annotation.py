@@ -6,14 +6,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from apb2.api import ParsedLevels, read_parsed_levels, write_parsed_levels
-from apb2.result_facade import (
-    FinalLayerTable,
-    JsonValue,
-    ObsFinal,
-    ParsedLevel,
-    VarFinal,
-)
+from apb2.api import ParsedLevel, ParsedLevels, read_parsed_levels, write_parsed_levels
 
 from apb_fasta.api import FastaAnnotator, add_peptide_properties
 from apb_fasta.cli import app
@@ -26,37 +19,17 @@ def _level(
     key_columns: tuple[str, ...],
     column_roles: dict[str, str],
 ) -> ParsedLevel:
-    layer_name = "Intensity"
-    roles: dict[str, JsonValue] = {}
-    for key, value in column_roles.items():
-        roles[key] = value
-    uns: dict[str, JsonValue] = {
-        "quantification_level": name,
-        "column_roles": roles,
-    }
-    return ParsedLevel(
-        obs=ObsFinal(frame=pl.DataFrame({"Run": ["run1"]}), key_columns=("Run",)),
-        var=VarFinal(frame=var, key_columns=key_columns, roles=column_roles),
-        primary_layer_name=layer_name,
-        uns=uns,
-        layers={
-            layer_name: FinalLayerTable(
-                layer_name=layer_name,
-                values=(
-                    pl.DataFrame(
-                        {
-                            **{key: var.get_column(key) for key in key_columns},
-                            "obs_0": [float(index + 1) for index in range(var.height)],
-                        }
-                    )
-                ).drop(key_columns, strict=False),
-                semantic_roles=("abundance",),
-            )
+    return ParsedLevel.build(
+        pl.DataFrame({"Run": ["run1"]}),
+        ("Run",),
+        var,
+        key_columns,
+        column_roles,
+        primary_layer="Intensity",
+        abundance={
+            "Intensity": pl.DataFrame({"obs_0": [float(index + 1) for index in range(var.height)]})
         },
-        obsm={},
-        varm={},
-        obsp={},
-        varp={},
+        uns={"quantification_level": name},
     )
 
 

@@ -7,12 +7,7 @@ from dataclasses import asdict
 from typing import cast
 
 import polars as pl
-from apb2.result_facade import (
-    AnnotationTable,
-    FeatureRelation,
-    JsonValue,
-    ParsedLevels,
-)
+from apb2.api import JsonValue, ParsedLevels
 
 from apb_fasta.calculation.matching import PeptideLevelInput
 from apb_fasta.calculation.protein_groups import ProteinGroupInput
@@ -171,16 +166,17 @@ def apply_protein_group_match(
     validate_protein_output_names(parsed)
     result = deepcopy(parsed)
     result.levels["protein"].varm[FASTA_SUMMARY_NAME] = match.summary.clone()
-    result.annotation_tables[MEMBER_TABLE_NAME] = AnnotationTable(
-        frame=match.members.clone(),
-        key_columns=match.member_key_columns,
-        metadata={"producer": "apb-fasta", "schema_version": "1"},
-    )
-    result.feature_relations[MEMBER_RELATION_NAME] = FeatureRelation(
-        annotation_table=MEMBER_TABLE_NAME,
-        target_level="protein",
-        coordinates=match.relation.clone(),
-        metadata={"producer": "apb-fasta", "semantic": "member_of"},
+    result = result.with_annotation_table(
+        MEMBER_TABLE_NAME,
+        match.members.clone(),
+        match.member_key_columns,
+        {"producer": "apb-fasta", "schema_version": "1"},
+    ).with_feature_relation(
+        MEMBER_RELATION_NAME,
+        MEMBER_TABLE_NAME,
+        "protein",
+        match.relation.clone(),
+        {"producer": "apb-fasta", "semantic": "member_of"},
     )
     _record_operation_metadata(
         result,
