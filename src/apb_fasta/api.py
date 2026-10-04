@@ -49,8 +49,6 @@ class FastaAnnotator:
     def __init__(
         self,
         proteins: pl.DataFrame,
-        /,
-        *,
         parameters: FastaAnnotationParameters = DEFAULT_FASTA_ANNOTATION_PARAMETERS,
     ) -> None:
         """Validate and bind a reusable protein database and configuration."""
@@ -58,7 +56,7 @@ class FastaAnnotator:
         self._proteins = proteins
         self._parameters = parameters
 
-    def verify_peptides(self, parsed: ParsedLevels, /) -> FastaAnnotationResult:
+    def verify_peptides(self, parsed: ParsedLevels) -> FastaAnnotationResult:
         """Verify every canonical stripped peptide against the protein sequences."""
         inputs = peptide_inputs(parsed)
         if not inputs:
@@ -80,7 +78,7 @@ class FastaAnnotator:
         )
         return FastaAnnotationResult(parsed=replacement, reports=reports)
 
-    def merge_annotations(self, parsed: ParsedLevels, /) -> FastaAnnotationResult:
+    def merge_annotations(self, parsed: ParsedLevels) -> FastaAnnotationResult:
         """Merge FASTA annotations for every reported protein-group member."""
         protein_input = protein_group_input(parsed)
         if protein_input is None:
@@ -98,7 +96,7 @@ class FastaAnnotator:
         )
         return FastaAnnotationResult(parsed=replacement, reports=reports)
 
-    def annotate(self, parsed: ParsedLevels, /) -> FastaAnnotationResult:
+    def annotate(self, parsed: ParsedLevels) -> FastaAnnotationResult:
         """Verify peptides and then merge protein annotations in memory."""
         verified = self.verify_peptides(parsed)
         annotated = self.merge_annotations(verified.parsed)
@@ -111,7 +109,7 @@ class FastaAnnotator:
         )
 
 
-def add_peptide_properties(parsed: ParsedLevels, /) -> ParsedLevels:
+def add_peptide_properties(parsed: ParsedLevels) -> ParsedLevels:
     """Attach sequence-derived properties to every peptide-derived level.
 
     Writes a feature-aligned ``varm["peptide_properties"]`` computed by

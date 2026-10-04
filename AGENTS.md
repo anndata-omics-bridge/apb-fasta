@@ -29,7 +29,7 @@ The closest `AGENTS.md` wins. Explicit user instructions override this file.
 
 - Fully annotate every function and method in `src/` and `tests`.
 - Use strict Pyright and Ruff with the configured 100-character line length.
-- Keep `__init__.py` empty and import public objects from defining modules.
+- Keep `__init__.py` empty and import from defining modules inside this package. Other anndata_bridge packages import this one only from `apb_fasta.api`, and it imports them only from theirs.
 - Use Google-style docstrings for public APIs.
 - Keep `docs/` current with behavioral changes; `make check` builds it with `--strict`.
 - Preserve unrelated worktree changes and add focused tests with behavioral changes.

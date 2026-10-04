@@ -1,5 +1,9 @@
 # Changes
 
+## 2026-10-04
+
+- `FastaAnnotator`, its methods and `add_peptide_properties` drop the `/` and `*` signature markers; every call that worked before still works.
+
 ## 2026-10-03
 
 - Peptide matching searches 10,000 protein sequences per Aho-Corasick call through prozor and builds no per-protein record objects; about 2.7 times faster on ProteoBench's 2.84 M-entry entrapment FASTA. FASTA_PATHS may instead be one protein-fasta database Parquet file (`protein-fasta database`), read about 70 times faster than parsing.
