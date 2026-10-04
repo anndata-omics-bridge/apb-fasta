@@ -7,6 +7,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 from apb2.api import ParsedLevel, ParsedLevels, read_parsed_levels, write_parsed_levels
+from protein_fasta.api import ProteinDatabase, refseq, uniprotkb
 
 from apb_fasta.api import FastaAnnotator, add_peptide_properties
 from apb_fasta.cli import app
@@ -243,6 +244,45 @@ def test_annotator_rejects_repeating_an_applied_operation() -> None:
 def test_constructor_requires_protein_fasta_database_schema() -> None:
     with pytest.raises(FastaAnnotationError, match="missing required columns"):
         FastaAnnotator(_proteins().drop("fasta_source_checksum"))
+
+
+def test_read_binds_the_parsed_fasta_in_file_order(tmp_path: Path) -> None:
+    fasta = tmp_path / "proteins.fasta"
+    fasta.write_text(
+        ">sp|P1|ONE_HUMAN Protein one OS=Homo sapiens OX=9606 GN=G1 PE=1 SV=1\nMPEPTIDEK\n"
+        ">sp|P2|TWO_HUMAN Protein two OS=Homo sapiens OX=9606 GN=G2 PE=1 SV=1\nXXPEPTIDEXX\n",
+        encoding="utf-8",
+    )
+
+    proteins = FastaAnnotator.read((fasta,)).proteins
+
+    assert proteins.get_column("id").to_list() == ["sp|P1|ONE_HUMAN", "sp|P2|TWO_HUMAN"]
+    assert proteins.get_column("accession").to_list() == ["P1", "P2"]
+    assert proteins.get_column("fasta_record_ordinal").to_list() == [0, 1]
+
+
+def test_read_accepts_the_protein_fasta_database_parquet(tmp_path: Path) -> None:
+    fasta = tmp_path / "proteins.fasta"
+    fasta.write_text(
+        ">sp|P1|ONE_HUMAN Protein one OS=Homo sapiens OX=9606 GN=G1 PE=1 SV=1\nMPEPTIDEK\n",
+        encoding="utf-8",
+    )
+    parquet = tmp_path / "proteins.parquet"
+    ProteinDatabase(uniprotkb, refseq).write_parquet((fasta,), parquet)
+
+    stored = FastaAnnotator.read((parquet,)).proteins
+
+    assert stored.equals(FastaAnnotator.read((fasta,)).proteins)
+
+
+def test_read_requires_a_fasta_path() -> None:
+    with pytest.raises(ValueError, match="at least one FASTA path is required"):
+        FastaAnnotator.read(())
+
+
+def test_read_refuses_an_unknown_header_format(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="unknown packaged protein format"):
+        FastaAnnotator.read((tmp_path / "proteins.fasta",), formats=("genbank",))
 
 
 @pytest.mark.parametrize(

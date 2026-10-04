@@ -3,6 +3,7 @@
 ## 2026-10-04
 
 - `FastaAnnotator`, its methods and `add_peptide_properties` drop the `/` and `*` signature markers; every call that worked before still works.
+- `FastaAnnotator.read(fasta, formats, parameters)` reads FASTA files, or the protein-fasta database Parquet, so callers no longer build the protein table with protein_fasta; `FastaAnnotator.proteins` returns the bound table. The CLI uses `read`, and an unknown `--formats` name now fails with protein_fasta's own message.
 
 ## 2026-10-03
 

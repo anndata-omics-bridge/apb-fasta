@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib.metadata import version
+from pathlib import Path
 
 import polars as pl
 from apb2.api import ParsedLevels
+from protein_fasta.api import ProteinDatabase, ProteinFormat
 from prozor.api import resolve_backend
 
 from apb_fasta.calculation.matching import match_peptide_levels
@@ -55,6 +58,24 @@ class FastaAnnotator:
         validate_protein_frame(proteins)
         self._proteins = proteins
         self._parameters = parameters
+
+    @classmethod
+    def read(
+        cls,
+        fasta: Sequence[Path],
+        formats: Sequence[str] = ("uniprotkb", "refseq"),
+        parameters: FastaAnnotationParameters = DEFAULT_FASTA_ANNOTATION_PARAMETERS,
+    ) -> FastaAnnotator:
+        """Read FASTA files, or the protein-fasta database Parquet written from them."""
+        if not fasta:
+            raise ValueError("at least one FASTA path is required")
+        database = ProteinDatabase(*(ProteinFormat(name) for name in formats))
+        return cls(database.parse(tuple(fasta)), parameters)
+
+    @property
+    def proteins(self) -> pl.DataFrame:
+        """The bound protein table, one row per FASTA entry in file order."""
+        return self._proteins
 
     def verify_peptides(self, parsed: ParsedLevels) -> FastaAnnotationResult:
         """Verify every canonical stripped peptide against the protein sequences."""

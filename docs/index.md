@@ -2,7 +2,7 @@
 
 FASTA verification and protein annotation for [APB2](https://anndata-omics-bridge.github.io/apb2/) results.
 
-`apb-fasta` takes one APB2 result and one parsed protein database and returns a replacement result. It never opens result files itself, and it never receives raw AnnData or MuData objects — [`protein_fasta`](https://anndata-omics-bridge.github.io/protein-fasta/) owns FASTA reading and header interpretation, [Prozor](https://anndata-omics-bridge.github.io/prozor/) owns peptide matching, and APB2 owns result persistence.
+`apb-fasta` takes one APB2 result and FASTA files, or their parsed protein database, and returns a replacement result. It never opens result files itself, and it never receives raw AnnData or MuData objects — [`protein_fasta`](https://anndata-omics-bridge.github.io/protein-fasta/) owns FASTA reading and header interpretation, [Prozor](https://anndata-omics-bridge.github.io/prozor/) owns peptide matching, and APB2 owns result persistence.
 
 ## Two independent operations
 

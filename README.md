@@ -13,20 +13,16 @@ Protein inference with Prozor is the planned third operation. It will remain exp
 
 ## Python API
 
-Load the APB2 result and parse the protein database once:
+Read the FASTA files once and load the APB2 result:
 
 ```python
 from pathlib import Path
 
 from apb2.api import read_parsed_levels, write_parsed_levels
 from apb_fasta.api import FastaAnnotator
-from protein_fasta.api import ProteinDatabase, refseq, uniprotkb
 
-proteins = ProteinDatabase(uniprotkb, refseq).parse(
-    (Path("human.fasta"), Path("contaminants.fasta"))
-)
+annotator = FastaAnnotator.read((Path("human.fasta"), Path("contaminants.fasta")))
 parsed = read_parsed_levels(Path("input.h5mu"))
-annotator = FastaAnnotator(proteins)
 ```
 
 Verify peptides only:

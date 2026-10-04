@@ -1,6 +1,6 @@
 # Verify peptides and annotate proteins
 
-Both operations need the same two inputs: an APB2 result and a parsed protein database.
+Both operations need the same two inputs: an APB2 result and the FASTA files.
 
 ## Load the inputs once
 
@@ -9,16 +9,12 @@ from pathlib import Path
 
 from apb2.api import read_parsed_levels, write_parsed_levels
 from apb_fasta.api import FastaAnnotator
-from protein_fasta.api import ProteinDatabase, refseq, uniprotkb
 
-proteins = ProteinDatabase(uniprotkb, refseq).parse(
-    (Path("human.fasta"), Path("contaminants.fasta"))
-)
+annotator = FastaAnnotator.read((Path("human.fasta"), Path("contaminants.fasta")))
 parsed = read_parsed_levels(Path("input.h5mu"))
-annotator = FastaAnnotator(proteins)
 ```
 
-The protein frame is parsed once and reused by every operation. Header formats are supplied in priority order.
+`FastaAnnotator.read()` parses the FASTA files once, with protein_fasta's `uniprotkb` and `refseq` header formats unless `formats` names others in priority order, and reuses the table for every operation. It also accepts the Parquet database `protein-fasta database` writes; `proteins` returns the bound table. `FastaAnnotator(proteins)` binds a table that is already parsed.
 
 ## Verify peptides only
 

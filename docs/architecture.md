@@ -27,11 +27,11 @@ graph TD
     config --> calculation
 ```
 
-- `api.py` — the public protein-bound lifecycle: `FastaAnnotator` and `FastaAnnotationResult`
+- `api.py` — the public protein-bound lifecycle: `FastaAnnotator`, which `read()` builds from FASTA files through protein_fasta, and `FastaAnnotationResult`
 - `integration.py` — the **only** module that reads or writes APB2 result values; extracts inputs, validates output names, and builds the deep replacement
 - `calculation/` — pure Polars in, pure Polars out; imports no APB2 and no storage framework
 - `configuration.py` / `errors.py` — user-selected behavior and the single expected-failure type
-- `cli.py` — composes `protein_fasta`, APB2 result I/O, and the lifecycle; holds no logic of its own
+- `cli.py` — composes APB2 result I/O and the lifecycle; holds no logic of its own
 
 ## Enforced import direction
 

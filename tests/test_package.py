@@ -16,7 +16,7 @@ def test_package_imports() -> None:
     assert apb_fasta.configuration.FastaAnnotationParameters
 
 
-def test_public_api_is_an_in_memory_annotation_boundary() -> None:
+def test_public_api_reads_fasta_but_never_result_files() -> None:
     path = Path(__file__).parents[1] / "src/apb_fasta/api.py"
     document = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     imported = {
@@ -29,9 +29,10 @@ def test_public_api_is_an_in_memory_annotation_boundary() -> None:
     assert {item for item in imported if item[0].startswith("apb2")} == {
         ("apb2.api", "ParsedLevels")
     }
-    assert not any(
-        module == "pathlib" or module.startswith("protein_fasta") for module, _name in imported
-    )
+    assert {item for item in imported if item[0].startswith("protein_fasta")} == {
+        ("protein_fasta.api", "ProteinDatabase"),
+        ("protein_fasta.api", "ProteinFormat"),
+    }
     assert not {"read_parsed_levels", "write_parsed_levels"}.intersection(
         name for _module, name in imported
     )

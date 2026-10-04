@@ -9,21 +9,14 @@ from typing import Literal
 from apb2.api import read_parsed_levels, write_parsed_levels
 from cyclopts import App
 from loguru import logger
-from protein_fasta.api import ProteinDatabase, ProteinFormat, refseq, uniprotkb
 
-from apb_fasta.api import FastaAnnotationResult, FastaAnnotator
-from apb_fasta.configuration import FastaAnnotationParameters
+from apb_fasta.api import FastaAnnotationParameters, FastaAnnotationResult, FastaAnnotator
 
 app = App(
     name="apb-fasta",
     help="Verify peptides and merge protein annotations using FASTA files",
     help_on_error=True,
 )
-
-_FORMATS: dict[str, ProteinFormat] = {
-    "refseq": refseq,
-    "uniprotkb": uniprotkb,
-}
 
 
 @app.command
@@ -39,10 +32,10 @@ def verify_peptides(
     """Verify stripped peptide sequences in SOURCE against FASTA_PATHS."""
     try:
         _require_new_target(source, output)
-        annotator = _annotator_for(
+        annotator = FastaAnnotator.read(
             fasta_paths,
-            formats=formats,
-            parameters=FastaAnnotationParameters(
+            formats,
+            FastaAnnotationParameters(
                 protein_group_separator=protein_group_separator,
                 matcher_backend=backend,
                 il_equivalent=il_equivalent,
@@ -69,10 +62,10 @@ def merge_annotations(
     """Merge FASTA annotations into the reported protein groups in SOURCE."""
     try:
         _require_new_target(source, output)
-        annotator = _annotator_for(
+        annotator = FastaAnnotator.read(
             fasta_paths,
-            formats=formats,
-            parameters=FastaAnnotationParameters(
+            formats,
+            FastaAnnotationParameters(
                 protein_group_separator=protein_group_separator,
             ),
         )
@@ -99,10 +92,10 @@ def run(
     """Verify peptides and merge protein annotations in one in-memory run."""
     try:
         _require_new_target(source, output)
-        annotator = _annotator_for(
+        annotator = FastaAnnotator.read(
             fasta_paths,
-            formats=formats,
-            parameters=FastaAnnotationParameters(
+            formats,
+            FastaAnnotationParameters(
                 protein_group_separator=protein_group_separator,
                 matcher_backend=backend,
                 il_equivalent=il_equivalent,
@@ -117,23 +110,6 @@ def run(
         return 1
     logger.info("wrote peptide-verified and FASTA-annotated APB2 result to {}", output)
     return 0
-
-
-def _annotator_for(
-    fasta_paths: tuple[Path, ...],
-    /,
-    *,
-    formats: tuple[str, ...],
-    parameters: FastaAnnotationParameters,
-) -> FastaAnnotator:
-    if not fasta_paths:
-        raise ValueError("at least one FASTA path is required")
-    unknown = tuple(name for name in formats if name not in _FORMATS)
-    if unknown:
-        raise ValueError(f"unknown protein format(s): {unknown}")
-    protein_database = ProteinDatabase(*(_FORMATS[name] for name in formats))
-    proteins = protein_database.parse(fasta_paths)
-    return FastaAnnotator(proteins, parameters=parameters)
 
 
 def _require_new_target(source: Path, target: Path, /) -> None:
