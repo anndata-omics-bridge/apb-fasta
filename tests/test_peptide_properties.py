@@ -6,7 +6,7 @@ from dataclasses import fields
 
 import polars as pl
 import pytest
-from protein_fasta.analytics.peptide_properties import PeptideProperties
+from protein_fasta.api import PeptideProperties
 
 from apb_fasta.calculation.peptide_properties import peptide_level_properties
 

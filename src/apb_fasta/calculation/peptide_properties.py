@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import polars as pl
-from protein_fasta.peptide_frame import peptide_property_frame
+from protein_fasta.api import peptide_property_frame
 
 
 def peptide_level_properties(frame: pl.DataFrame, sequence_column: str, /) -> pl.DataFrame:

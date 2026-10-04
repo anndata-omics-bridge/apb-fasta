@@ -9,7 +9,7 @@ from pathlib import Path
 
 from apb2.api import read_parsed_levels, write_parsed_levels
 from apb_fasta.api import FastaAnnotator
-from protein_fasta.frame import ProteinDatabase, refseq, uniprotkb
+from protein_fasta.api import ProteinDatabase, refseq, uniprotkb
 
 proteins = ProteinDatabase(uniprotkb, refseq).parse(
     (Path("human.fasta"), Path("contaminants.fasta"))
@@ -57,7 +57,7 @@ complete = annotator.merge_annotations(verified.parsed)
 ## Configuration
 
 ```python
-from apb_fasta.configuration import FastaAnnotationParameters
+from apb_fasta.api import FastaAnnotationParameters
 
 parameters = FastaAnnotationParameters(
     protein_group_separator=";",

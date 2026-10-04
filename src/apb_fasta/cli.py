@@ -9,7 +9,7 @@ from typing import Literal
 from apb2.api import read_parsed_levels, write_parsed_levels
 from cyclopts import App
 from loguru import logger
-from protein_fasta.frame import ProteinDatabase, ProteinFormat, refseq, uniprotkb
+from protein_fasta.api import ProteinDatabase, ProteinFormat, refseq, uniprotkb
 
 from apb_fasta.api import FastaAnnotationResult, FastaAnnotator
 from apb_fasta.configuration import FastaAnnotationParameters

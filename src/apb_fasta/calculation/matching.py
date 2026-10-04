@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 import polars as pl
-from prozor.matching.annotation import annotate_peptides
+from prozor.api import annotate_peptides
 
 from apb_fasta.calculation.results import PeptideCoverage, PeptideLevelMatch
 

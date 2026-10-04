@@ -7,7 +7,7 @@ from importlib.metadata import version
 
 import polars as pl
 from apb2.api import ParsedLevels
-from prozor.matching.automaton import resolve_backend
+from prozor.api import resolve_backend
 
 from apb_fasta.calculation.matching import match_peptide_levels
 from apb_fasta.calculation.peptide_properties import peptide_level_properties
@@ -137,6 +137,8 @@ def add_peptide_properties(parsed: ParsedLevels, /) -> ParsedLevels:
 
 
 __all__ = [
+    "FastaAnnotationParameters",
+    "FastaAnnotationReports",
     "FastaAnnotationResult",
     "FastaAnnotator",
     "add_peptide_properties",
