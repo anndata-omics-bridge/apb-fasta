@@ -2,6 +2,7 @@
 
 ## 2026-10-05
 
+- 0.1.1: `CITATION.cff` records the author's ORCID, so the Zenodo archive of each GitHub release carries complete citation metadata and a DOI. CI checks out APB2 0.1.1, protein-fasta 0.3.1 and Prozor 0.1.1.
 - PyPI release setup: `.github/workflows/publish.yml` builds and checks the distributions, then publishes to PyPI through trusted publishing for a published GitHub release tagged `v<version>`; a manual run only builds and checks. README links point at GitHub or the documentation site so they resolve on PyPI, README gains an installation section, and `pyproject.toml` adds keywords and classifiers.
 
 ## 2026-10-04
