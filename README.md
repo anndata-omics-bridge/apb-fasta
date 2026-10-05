@@ -1,6 +1,7 @@
 # apb-fasta
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23151458.svg)](https://doi.org/10.5281/zenodo.23151458)
+[![PyPI](https://img.shields.io/pypi/v/apb-fasta.svg)](https://pypi.org/project/apb-fasta/)
 
 FASTA verification and protein annotation for APB2 results.
 
