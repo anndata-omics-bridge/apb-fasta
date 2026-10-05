@@ -1,5 +1,7 @@
 # apb-fasta
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23151458.svg)](https://doi.org/10.5281/zenodo.23151458)
+
 FASTA verification and protein annotation for APB2 results.
 
 **[Online documentation](https://anndata-omics-bridge.github.io/apb-fasta/)** or its [source index](https://github.com/anndata-omics-bridge/apb-fasta/blob/main/docs/index.md).
