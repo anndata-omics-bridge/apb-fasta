@@ -20,7 +20,7 @@ Protein inference with Prozor is the planned third operation. It will remain exp
 `apb-fasta` is developed alongside its siblings in one workspace:
 
 ```bash
-uv sync --frozen --group dev --group docs
+uv sync --group dev --group docs
 ```
 
 ## Next
