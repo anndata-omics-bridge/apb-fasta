@@ -2,7 +2,7 @@
 
 FASTA verification and protein annotation for APB2 results.
 
-**[Online documentation](https://anndata-omics-bridge.github.io/apb-fasta/)** or its [source index](docs/index.md).
+**[Online documentation](https://anndata-omics-bridge.github.io/apb-fasta/)** or its [source index](https://github.com/anndata-omics-bridge/apb-fasta/blob/main/docs/index.md).
 
 The first release exposes two independent operations:
 
@@ -10,6 +10,14 @@ The first release exposes two independent operations:
 - merge FASTA annotations for every reported protein-group member without collapsing the group to its leading accession.
 
 Protein inference with Prozor is the planned third operation. It will remain explicit and opt-in.
+
+## Installation
+
+APB FASTA requires Python 3.13 or later.
+
+```bash
+pip install apb-fasta
+```
 
 ## Python API
 
