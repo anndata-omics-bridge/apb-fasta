@@ -17,9 +17,14 @@ Protein inference with Prozor is the planned third operation. It will remain exp
 
 ## Install
 
-`apb-fasta` is developed alongside its siblings in one workspace:
+Users: `pip install apb-fasta`. Contributors: `uv sync` resolves APB2, protein_fasta and Prozor from sibling folders, so clone all four side by side:
 
 ```bash
+git clone https://github.com/anndata-omics-bridge/apb2.git
+git clone https://github.com/anndata-omics-bridge/protein-fasta.git protein_fasta
+git clone https://github.com/anndata-omics-bridge/prozor.git
+git clone https://github.com/anndata-omics-bridge/apb-fasta.git
+cd apb-fasta
 uv sync --group dev --group docs
 ```
 
