@@ -17,8 +17,11 @@ Writes a feature-aligned `varm["fasta_validation"]` table on every peptide-deriv
 | `reported_member_count` | UInt64 | Protein-group members the result reported |
 | `reported_members_in_fasta_count` | UInt64 | Reported members found in the database |
 | `peptide_in_reported_protein` | Boolean | The sequence occurs in a reported member |
+| `fasta_il_only` | Boolean | `peptide_in_fasta` or `peptide_in_reported_protein` holds only for another I/L spelling |
 
-The last three columns are null when the level reports no protein group, which distinguishes "not reported" from "reported and unmatched".
+The three `reported_*` and `peptide_in_reported_protein` columns are null when the level reports no protein group, which distinguishes "not reported" from "reported and unmatched".
+
+Mass spectrometry cannot tell isoleucine from leucine, so a vendor may spell a peptide differently from its FASTA protein. Protein sequences are matched as read. A peptide that occurs exactly keeps exactly its proteins; its other I/L spellings are tried only when it occurs nowhere, or in no reported member the database contains. In the first case the spellings' matches become its proteins; in the second they count only toward `peptide_in_reported_protein`. Coverage counts the targets matched through another spelling as `il_only_matched_feature_count`.
 
 ## Protein annotation
 

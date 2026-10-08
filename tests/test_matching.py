@@ -25,7 +25,6 @@ def _match(
     *,
     assignment: str | None = "assignment",
     proteins: pl.DataFrame | None = None,
-    il_equivalent: bool = False,
     backend: str = "auto",
     separator: str = ";",
 ) -> PeptideLevelMatch:
@@ -35,27 +34,23 @@ def _match(
         {"ion": PeptideLevelInput(frame, "peptide", assignment, "decoy")},
         _proteins() if proteins is None else proteins,
         backend=backend,
-        il_equivalent=il_equivalent,
         protein_group_separator=separator,
     )["ion"]
 
 
 @pytest.mark.parametrize("backend", ["ahocorapy", "ahocorasick_rs"])
-@pytest.mark.parametrize("il_equivalent", [False, True])
-def test_duplicate_records_sites_assignments_and_feature_order(
-    backend: str, il_equivalent: bool
-) -> None:
+def test_duplicate_records_sites_assignments_and_feature_order(backend: str) -> None:
     frame = pl.DataFrame(
         {
             "peptide": [" aa ", "AAA", None, "", "il", "pill", "ABSENT", "aa"],
             "assignment": ["a; a; unknown", "p1", None, "", "p1", "p3", "a", " ; "],
         }
     )
-    result = _match(frame, backend=backend, il_equivalent=il_equivalent)
+    result = _match(frame, backend=backend)
     expected = pl.DataFrame(
         {
             "peptide_in_fasta": [True, True, False, False, True, True, False, True],
-            "fasta_match_site_count": [4, 2, 0, 0, 3 if il_equivalent else 2, 1, 0, 4],
+            "fasta_match_site_count": [4, 2, 0, 0, 2, 1, 0, 4],
             "fasta_matching_protein_count": [2, 2, 0, 0, 2, 1, 0, 2],
             "fasta_matching_protein_ids": ["p1;p1", "p1;p1", "", "", "p1;p3", "p3", "", "p1;p1"],
             "fasta_matching_organisms": [""] * 8,
@@ -63,6 +58,7 @@ def test_duplicate_records_sites_assignments_and_feature_order(
             "reported_member_count": [3, 1, 0, 0, 1, 1, 1, 0],
             "reported_members_in_fasta_count": [2, 1, 0, 0, 1, 1, 1, 0],
             "peptide_in_reported_protein": [True, True, False, False, True, True, False, False],
+            "fasta_il_only": [False] * 8,
         },
         schema={
             "peptide_in_fasta": pl.Boolean,
@@ -74,10 +70,11 @@ def test_duplicate_records_sites_assignments_and_feature_order(
             "reported_member_count": pl.UInt64,
             "reported_members_in_fasta_count": pl.UInt64,
             "peptide_in_reported_protein": pl.Boolean,
+            "fasta_il_only": pl.Boolean,
         },
     )
     assert_frame_equal(result.summary, expected)
-    assert result.coverage == PeptideCoverage(8, 5, 5, 3, 10 if il_equivalent else 9, 0)
+    assert result.coverage == PeptideCoverage(8, 5, 5, 3, 9, 0, 0)
 
 
 def test_matched_organisms_and_contaminants_are_summarized_per_feature() -> None:
@@ -119,13 +116,13 @@ def test_empty_and_null_features_keep_height_and_schema(size: int) -> None:
     assert result.summary.height == size
     assert result.summary.schema["fasta_matching_protein_ids"] == pl.String
     assert result.summary.schema["fasta_match_site_count"] == pl.UInt64
-    assert result.coverage == PeptideCoverage(size, 0, 0, size, 0, 0)
+    assert result.coverage == PeptideCoverage(size, 0, 0, size, 0, 0, 0)
 
 
 def test_empty_database_and_missing_accession_column() -> None:
     frame = pl.DataFrame({"peptide": ["AA"], "assignment": ["p1"]})
     empty = _match(frame, proteins=_proteins().clear())
-    assert empty.coverage == PeptideCoverage(1, 1, 0, 1, 0, 0)
+    assert empty.coverage == PeptideCoverage(1, 1, 0, 1, 0, 0, 0)
     assert empty.summary["reported_members_in_fasta_count"].to_list() == [0]
     no_accessions = _match(frame, proteins=_proteins().drop("accession"))
     assert no_accessions.summary["peptide_in_reported_protein"].to_list() == [True]
@@ -149,7 +146,7 @@ def test_mixed_object_and_nontext_inputs() -> None:
     )
     assert _match(frame).summary["peptide_in_reported_protein"].to_list() == [True, False, False]
     nontext = _match(pl.DataFrame({"peptide": [1, 2], "assignment": [1, 2]}))
-    assert nontext.coverage == PeptideCoverage(2, 0, 0, 2, 0, 0)
+    assert nontext.coverage == PeptideCoverage(2, 0, 0, 2, 0, 0, 0)
 
 
 def test_decoys_count_apart_from_matched_and_unmatched_targets() -> None:
@@ -176,11 +173,9 @@ def test_multilevel_coverage_counts_sequences_per_level() -> None:
         "ion": PeptideLevelInput(frame, "peptide", "assignment", "decoy"),
         "peptide": PeptideLevelInput(frame.head(1), "peptide", "assignment", "decoy"),
     }
-    result = match_peptide_levels(
-        levels, _proteins(), backend="auto", il_equivalent=False, protein_group_separator="|"
-    )
-    assert result["ion"].coverage == PeptideCoverage(2, 1, 2, 0, 4, 0)
-    assert result["peptide"].coverage == PeptideCoverage(1, 1, 1, 0, 4, 0)
+    result = match_peptide_levels(levels, _proteins(), backend="auto", protein_group_separator="|")
+    assert result["ion"].coverage == PeptideCoverage(2, 1, 2, 0, 4, 0, 0)
+    assert result["peptide"].coverage == PeptideCoverage(1, 1, 1, 0, 4, 0, 0)
     assert result["ion"].summary["reported_member_count"].to_list() == [2, 1]
 
 
@@ -189,3 +184,35 @@ def test_nontext_protein_fields_are_rejected(column: str) -> None:
     proteins = _proteins().with_columns(pl.lit(12).alias(column))
     with pytest.raises(ValueError, match=f"column '{column}' contains a non-text value"):
         _match(pl.DataFrame({"peptide": ["AA"], "assignment": ["p1"]}), proteins=proteins)
+
+
+@pytest.mark.parametrize("backend", ["ahocorapy", "ahocorasick_rs"])
+def test_other_il_spellings_fill_only_what_exact_matching_misses(backend: str) -> None:
+    proteins = pl.DataFrame(
+        {"id": ["P1", "P2", "P3"], "sequence": ["MKAILEK", "MKALLEK", "GGLIVR"]}
+    )
+    frame = pl.DataFrame(
+        {
+            "peptide": ["AILE", "GGILVR", "WWW", "ALLE", "ALLE", "GGILVR"],
+            "assignment": ["P1", "P3", None, "P1", "P2", None],
+            "decoy": [False, False, False, False, False, True],
+        }
+    )
+
+    result = _match(frame, proteins=proteins, backend=backend)
+
+    summary = result.summary
+    # AILE occurs exactly in P1 and keeps it alone, although P2 has the spelling ALLE.
+    assert summary["fasta_matching_protein_ids"].to_list() == ["P1", "P3", "", "P2", "P2", "P3"]
+    assert summary["peptide_in_fasta"].to_list() == [True, True, False, True, True, True]
+    # ALLE assigned to P1 occurs there only as AILE; its protein list stays exact.
+    assert summary["peptide_in_reported_protein"].to_list() == [
+        True,
+        True,
+        False,
+        True,
+        True,
+        False,
+    ]
+    assert summary["fasta_il_only"].to_list() == [False, True, False, True, False, True]
+    assert result.coverage == PeptideCoverage(6, 4, 4, 1, 3, 1, 1)

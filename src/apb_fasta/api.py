@@ -86,7 +86,6 @@ class FastaAnnotator:
             inputs,
             self._proteins,
             backend=self._parameters.matcher_backend,
-            il_equivalent=self._parameters.il_equivalent,
             protein_group_separator=self._parameters.protein_group_separator,
         )
         replacement, reports = apply_peptide_matches(
@@ -94,7 +93,6 @@ class FastaAnnotator:
             peptide_levels,
             requested_backend=self._parameters.matcher_backend,
             resolved_backend=resolve_backend(self._parameters.matcher_backend),
-            il_equivalent=self._parameters.il_equivalent,
             protein_metadata=protein_frame_metadata(self._proteins),
         )
         return FastaAnnotationResult(parsed=replacement, reports=reports)

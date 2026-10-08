@@ -58,7 +58,6 @@ from apb_fasta.api import FastaAnnotationParameters
 parameters = FastaAnnotationParameters(
     protein_group_separator=";",
     matcher_backend="auto",
-    il_equivalent=False,
 )
 annotator = FastaAnnotator(proteins, parameters=parameters)
 ```
@@ -67,7 +66,6 @@ annotator = FastaAnnotator(proteins, parameters=parameters)
 | --- | --- | --- |
 | `protein_group_separator` | `";"` | Separator splitting a protein group into members; must not be empty |
 | `matcher_backend` | `"auto"` | Prozor Aho-Corasick backend: `auto`, `ahocorapy`, or `ahocorasick_rs` |
-| `il_equivalent` | `False` | Treat leucine and isoleucine as equivalent when matching |
 
 ## Failures are explicit
 

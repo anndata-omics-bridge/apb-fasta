@@ -21,6 +21,8 @@ class PeptideCoverage:
     match_site_count: int
     decoy_feature_count: int
     """Rows apb2 marked ``apb_Decoy``; a decoy is neither matched nor unmatched."""
+    il_only_matched_feature_count: int
+    """Targets in ``matched_feature_count`` whose peptide matches only as another I/L spelling."""
 
 
 @dataclass(frozen=True, slots=True)

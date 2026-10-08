@@ -26,7 +26,6 @@ def verify_peptides(
     output: Path,
     formats: tuple[str, ...] = ("uniprotkb", "refseq"),
     backend: Literal["auto", "ahocorapy", "ahocorasick_rs"] = "auto",
-    il_equivalent: bool = False,
     protein_group_separator: str = ";",
 ) -> int:
     """Verify stripped peptide sequences in SOURCE against FASTA_PATHS."""
@@ -38,7 +37,6 @@ def verify_peptides(
             FastaAnnotationParameters(
                 protein_group_separator=protein_group_separator,
                 matcher_backend=backend,
-                il_equivalent=il_equivalent,
             ),
         )
         result = annotator.verify_peptides(read_parsed_levels(source))
@@ -86,7 +84,6 @@ def run(
     output: Path,
     formats: tuple[str, ...] = ("uniprotkb", "refseq"),
     backend: Literal["auto", "ahocorapy", "ahocorasick_rs"] = "auto",
-    il_equivalent: bool = False,
     protein_group_separator: str = ";",
 ) -> int:
     """Verify peptides and merge protein annotations in one in-memory run."""
@@ -98,7 +95,6 @@ def run(
             FastaAnnotationParameters(
                 protein_group_separator=protein_group_separator,
                 matcher_backend=backend,
-                il_equivalent=il_equivalent,
             ),
         )
         result = annotator.annotate(read_parsed_levels(source))
@@ -126,11 +122,12 @@ def _write_result(result: FastaAnnotationResult, output: Path) -> None:
 def _report_peptide_verification(result: FastaAnnotationResult) -> None:
     for level, coverage in result.reports.peptide_levels.items():
         logger.info(
-            "level={} peptides_in_fasta={}/{} unmatched={} decoys={} unique_sequences={} "
-            "match_sites={}",
+            "level={} peptides_in_fasta={}/{} il_only={} unmatched={} decoys={} "
+            "unique_sequences={} match_sites={}",
             level,
             coverage.matched_feature_count,
             coverage.feature_count - coverage.decoy_feature_count,
+            coverage.il_only_matched_feature_count,
             coverage.unmatched_feature_count,
             coverage.decoy_feature_count,
             coverage.unique_sequence_count,

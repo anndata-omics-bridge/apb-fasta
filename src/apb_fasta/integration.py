@@ -128,7 +128,6 @@ def apply_peptide_matches(
     *,
     requested_backend: str,
     resolved_backend: str,
-    il_equivalent: bool,
     protein_metadata: dict[str, JsonValue],
 ) -> tuple[ParsedLevels, FastaAnnotationReports]:
     """Attach peptide verification to a deep replacement of the APB2 result."""
@@ -147,7 +146,6 @@ def apply_peptide_matches(
         {
             "requested_backend": requested_backend,
             "resolved_backend": resolved_backend,
-            "il_equivalent": il_equivalent,
             **protein_metadata,
         },
     )
@@ -268,7 +266,7 @@ def _record_operation_metadata(
     existing = parsed.metadata.get("fasta")
     metadata: dict[str, JsonValue]
     if existing is None:
-        metadata = {"schema_version": "2", "provenance": {}}
+        metadata = {"schema_version": "3", "provenance": {}}
     else:
         metadata = cast(dict[str, JsonValue], deepcopy(existing))
     provenance = metadata.setdefault("provenance", {})

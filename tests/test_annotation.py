@@ -100,7 +100,7 @@ def test_annotate_verifies_peptides_and_merges_annotations_without_mutating_inpu
     metadata = result.parsed.metadata["fasta"]
     assert isinstance(metadata, dict)
     assert set(metadata) == {"schema_version", "provenance"}
-    assert metadata["schema_version"] == "2"
+    assert metadata["schema_version"] == "3"
     assert isinstance(metadata["provenance"], dict)
     assert set(metadata["provenance"]) == {"peptide_verification", "protein_annotation"}
 

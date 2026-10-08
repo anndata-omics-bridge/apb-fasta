@@ -10,7 +10,6 @@ class FastaAnnotationParameters:
 
     protein_group_separator: str = ";"
     matcher_backend: Literal["auto", "ahocorapy", "ahocorasick_rs"] = "auto"
-    il_equivalent: bool = False
 
     def __post_init__(self) -> None:
         """Reject a separator that cannot define protein-group members."""
