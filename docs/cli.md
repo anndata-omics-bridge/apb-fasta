@@ -12,6 +12,8 @@ Three commands, one per operation. All take an APB2 result, one or more FASTA fi
 apb-fasta verify-peptides input.h5mu human.fasta contaminants.fasta --output verified.h5mu
 ```
 
+Reports per level how many targets the FASTA contains, how many it does not, and the decoys apb2 marked `apb_Decoy`, which are neither.
+
 ## `merge-annotations`
 
 ```bash

@@ -126,11 +126,13 @@ def _write_result(result: FastaAnnotationResult, output: Path) -> None:
 def _report_peptide_verification(result: FastaAnnotationResult) -> None:
     for level, coverage in result.reports.peptide_levels.items():
         logger.info(
-            "level={} peptides_in_fasta={}/{} unmatched={} unique_sequences={} match_sites={}",
+            "level={} peptides_in_fasta={}/{} unmatched={} decoys={} unique_sequences={} "
+            "match_sites={}",
             level,
             coverage.matched_feature_count,
-            coverage.feature_count,
+            coverage.feature_count - coverage.decoy_feature_count,
             coverage.unmatched_feature_count,
+            coverage.decoy_feature_count,
             coverage.unique_sequence_count,
             coverage.match_site_count,
         )

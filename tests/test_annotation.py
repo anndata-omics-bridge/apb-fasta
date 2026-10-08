@@ -41,6 +41,7 @@ def _parsed() -> ParsedLevels:
             {
                 "ProForma_peptide": ["PEPTIDE", "OTHER", "MISSING"],
                 "Proteins": ["P1;P2", "P2", "P9"],
+                "apb_Decoy": [False, False, False],
             }
         ),
         ("ProForma_peptide",),
@@ -230,6 +231,14 @@ def test_annotator_rejects_owned_output_collisions() -> None:
     parsed.levels["peptide"].varm["fasta_validation"] = pl.DataFrame({"old": [1, 2, 3]})
 
     with pytest.raises(FastaAnnotationError, match="already contains"):
+        FastaAnnotator(_proteins()).verify_peptides(parsed)
+
+
+def test_peptide_verification_requires_apb2_decoy_marking() -> None:
+    parsed = _parsed()
+    parsed.levels["peptide"].var.frame = parsed.levels["peptide"].var.frame.drop("apb_Decoy")
+
+    with pytest.raises(FastaAnnotationError, match="lacks apb2's apb_Decoy marking"):
         FastaAnnotator(_proteins()).verify_peptides(parsed)
 
 

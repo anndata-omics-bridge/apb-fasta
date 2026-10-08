@@ -15,8 +15,12 @@ class PeptideCoverage:
     feature_count: int
     unique_sequence_count: int
     matched_feature_count: int
+    """Targets, rows apb2 did not mark ``apb_Decoy``, whose peptide the FASTA contains."""
     unmatched_feature_count: int
+    """Targets whose peptide the FASTA does not contain."""
     match_site_count: int
+    decoy_feature_count: int
+    """Rows apb2 marked ``apb_Decoy``; a decoy is neither matched nor unmatched."""
 
 
 @dataclass(frozen=True, slots=True)

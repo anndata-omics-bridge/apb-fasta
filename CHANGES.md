@@ -1,5 +1,9 @@
 # Changes
 
+## 2026-10-08
+
+- Peptide coverage separates decoys: `PeptideCoverage` gains `decoy_feature_count`, the rows apb2 marks `apb_Decoy`, and `matched_feature_count` and `unmatched_feature_count` now count targets only, so a decoy no longer reports as an unmatched peptide. Peptide verification requires `apb_Decoy` on every level it checks; the CLI reports `decoys=`.
+
 ## 2026-10-05
 
 - `uv.lock` is no longer committed: `make sync` and CI resolve the environment from `pyproject.toml`, `make check` drops `uv lock --check`, CI caches by `pyproject.toml`, and the dev group pins `ruff==0.16.10` and `pyright==1.1.414` so lint and type results stay stable.

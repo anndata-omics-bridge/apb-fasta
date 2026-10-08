@@ -29,8 +29,10 @@ def _match(
     backend: str = "auto",
     separator: str = ";",
 ) -> PeptideLevelMatch:
+    if "decoy" not in frame.columns:
+        frame = frame.with_columns(pl.lit(value=False).alias("decoy"))
     return match_peptide_levels(
-        {"ion": PeptideLevelInput(frame, "peptide", assignment)},
+        {"ion": PeptideLevelInput(frame, "peptide", assignment, "decoy")},
         _proteins() if proteins is None else proteins,
         backend=backend,
         il_equivalent=il_equivalent,
@@ -75,7 +77,7 @@ def test_duplicate_records_sites_assignments_and_feature_order(
         },
     )
     assert_frame_equal(result.summary, expected)
-    assert result.coverage == PeptideCoverage(8, 5, 5, 3, 10 if il_equivalent else 9)
+    assert result.coverage == PeptideCoverage(8, 5, 5, 3, 10 if il_equivalent else 9, 0)
 
 
 def test_matched_organisms_and_contaminants_are_summarized_per_feature() -> None:
@@ -117,13 +119,13 @@ def test_empty_and_null_features_keep_height_and_schema(size: int) -> None:
     assert result.summary.height == size
     assert result.summary.schema["fasta_matching_protein_ids"] == pl.String
     assert result.summary.schema["fasta_match_site_count"] == pl.UInt64
-    assert result.coverage == PeptideCoverage(size, 0, 0, size, 0)
+    assert result.coverage == PeptideCoverage(size, 0, 0, size, 0, 0)
 
 
 def test_empty_database_and_missing_accession_column() -> None:
     frame = pl.DataFrame({"peptide": ["AA"], "assignment": ["p1"]})
     empty = _match(frame, proteins=_proteins().clear())
-    assert empty.coverage == PeptideCoverage(1, 1, 0, 1, 0)
+    assert empty.coverage == PeptideCoverage(1, 1, 0, 1, 0, 0)
     assert empty.summary["reported_members_in_fasta_count"].to_list() == [0]
     no_accessions = _match(frame, proteins=_proteins().drop("accession"))
     assert no_accessions.summary["peptide_in_reported_protein"].to_list() == [True]
@@ -147,20 +149,38 @@ def test_mixed_object_and_nontext_inputs() -> None:
     )
     assert _match(frame).summary["peptide_in_reported_protein"].to_list() == [True, False, False]
     nontext = _match(pl.DataFrame({"peptide": [1, 2], "assignment": [1, 2]}))
-    assert nontext.coverage == PeptideCoverage(2, 0, 0, 2, 0)
+    assert nontext.coverage == PeptideCoverage(2, 0, 0, 2, 0, 0)
+
+
+def test_decoys_count_apart_from_matched_and_unmatched_targets() -> None:
+    frame = pl.DataFrame(
+        {
+            "peptide": ["AA", "GG", "GG", "AA"],
+            "assignment": ["p1", None, None, None],
+            "decoy": [False, False, True, True],
+        }
+    )
+
+    coverage = _match(frame).coverage
+
+    assert coverage.feature_count == 4
+    assert (coverage.matched_feature_count, coverage.unmatched_feature_count) == (1, 1)
+    assert coverage.decoy_feature_count == 2
 
 
 def test_multilevel_coverage_counts_sequences_per_level() -> None:
-    frame = pl.DataFrame({"peptide": ["AA", "aa"], "assignment": ["a|a", "p1"]})
+    frame = pl.DataFrame(
+        {"peptide": ["AA", "aa"], "assignment": ["a|a", "p1"], "decoy": [False, False]}
+    )
     levels = {
-        "ion": PeptideLevelInput(frame, "peptide", "assignment"),
-        "peptide": PeptideLevelInput(frame.head(1), "peptide", "assignment"),
+        "ion": PeptideLevelInput(frame, "peptide", "assignment", "decoy"),
+        "peptide": PeptideLevelInput(frame.head(1), "peptide", "assignment", "decoy"),
     }
     result = match_peptide_levels(
         levels, _proteins(), backend="auto", il_equivalent=False, protein_group_separator="|"
     )
-    assert result["ion"].coverage == PeptideCoverage(2, 1, 2, 0, 4)
-    assert result["peptide"].coverage == PeptideCoverage(1, 1, 1, 0, 4)
+    assert result["ion"].coverage == PeptideCoverage(2, 1, 2, 0, 4, 0)
+    assert result["peptide"].coverage == PeptideCoverage(1, 1, 1, 0, 4, 0)
     assert result["ion"].summary["reported_member_count"].to_list() == [2, 1]
 
 

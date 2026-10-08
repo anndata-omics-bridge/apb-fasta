@@ -27,6 +27,7 @@ PEPTIDE_VERIFICATION_OPERATION = "peptide_verification"
 PROTEIN_ANNOTATION_OPERATION = "protein_annotation"
 PEPTIDE_PROPERTIES_OPERATION = "peptide_properties"
 _PEPTIDE_COLUMN = "ProForma_peptide"
+_DECOY_COLUMN = "apb_Decoy"
 _RESERVED_MEMBER_COLUMNS = frozenset({"source_level", "member_ordinal", "match_ordinal"})
 
 
@@ -56,10 +57,13 @@ def peptide_inputs(parsed: ParsedLevels, /) -> dict[str, PeptideLevelInput]:
     for name, level in parsed.levels.items():
         if name == "protein" or _PEPTIDE_COLUMN not in level.var.frame.columns:
             continue
+        if _DECOY_COLUMN not in level.var.frame.columns:
+            raise FastaAnnotationError(f"level {name!r} lacks apb2's {_DECOY_COLUMN} marking")
         result[name] = PeptideLevelInput(
             frame=level.var.frame,
             sequence_column=_PEPTIDE_COLUMN,
             accession_column=_fasta_accession_column(level.var.roles, level.var.frame),
+            decoy_column=_DECOY_COLUMN,
         )
     return result
 

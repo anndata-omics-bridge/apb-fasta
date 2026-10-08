@@ -18,6 +18,7 @@ class PeptideLevelInput:
     frame: pl.DataFrame
     sequence_column: str
     accession_column: str | None
+    decoy_column: str
 
 
 def match_peptide_levels(
@@ -112,6 +113,7 @@ def _prepare_features(level: PeptideLevelInput, il_equivalent: bool) -> pl.DataF
     ).select(
         pl.when(pl.col("peptide") != "").then(pl.col("peptide")).alias("peptide"),
         "assignment",
+        pl.col(level.decoy_column).fill_null(value=False).alias("decoy"),
     )
 
 
@@ -196,14 +198,17 @@ def _level_match(
             pl.lit(None, dtype=pl.Boolean).alias("peptide_in_reported_protein"),
         )
     unique = joined.select("peptide", "fasta_match_site_count").drop_nulls("peptide").unique()
-    matched_count = int(summary.get_column("peptide_in_fasta").sum() or 0)
+    decoys = features.get_column("decoy")
+    decoy_count = int(decoys.sum() or 0)
+    matched_count = int(summary.get_column("peptide_in_fasta").filter(~decoys).sum() or 0)
     return PeptideLevelMatch(
         summary=summary,
         coverage=PeptideCoverage(
             feature_count=features.height,
             unique_sequence_count=unique.height,
             matched_feature_count=matched_count,
-            unmatched_feature_count=features.height - matched_count,
+            unmatched_feature_count=features.height - decoy_count - matched_count,
             match_site_count=int(unique.get_column("fasta_match_site_count").sum() or 0),
+            decoy_feature_count=decoy_count,
         ),
     )
