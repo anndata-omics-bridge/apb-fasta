@@ -7,17 +7,20 @@ from dataclasses import asdict
 from typing import cast
 
 import polars as pl
-from apb2.api import JsonValue, ParsedLevels
+from apb2.api import JsonValue, ParsedLevel, ParsedLevels
 
 from apb_fasta.calculation.matching import PeptideLevelInput
 from apb_fasta.calculation.protein_groups import ProteinGroupInput
 from apb_fasta.calculation.results import (
     FastaAnnotationReports,
+    PeptideCoverage,
     PeptideLevelMatch,
+    ProteinGroupCoverage,
     ProteinGroupMatch,
 )
 from apb_fasta.errors import FastaAnnotationError
 
+FASTA_SCHEMA_VERSION = "4"
 FASTA_VALIDATION_NAME = "fasta_validation"
 FASTA_SUMMARY_NAME = "fasta"
 MEMBER_TABLE_NAME = "fasta_protein_group_members"
@@ -104,14 +107,14 @@ def validate_peptide_output_names(
             raise FastaAnnotationError(
                 f"level {name!r} already contains varm[{FASTA_VALIDATION_NAME!r}]"
             )
-        if "fasta" in parsed.levels[level_name].metadata:
-            raise FastaAnnotationError(f"level {name!r} metadata already contains 'fasta'")
+        _level_record(parsed.levels[level_name], name)
 
 
 def validate_protein_output_names(parsed: ParsedLevels, /) -> None:
     """Reject protein-annotation collisions before constructing a replacement."""
     _validate_operation_metadata(parsed, PROTEIN_ANNOTATION_OPERATION)
     protein = parsed.levels["protein"]
+    _level_record(protein, "protein")
     if FASTA_SUMMARY_NAME in protein.varm:
         raise FastaAnnotationError(f"level 'protein' already contains varm[{FASTA_SUMMARY_NAME!r}]")
     if MEMBER_TABLE_NAME in parsed.annotation_tables:
@@ -139,10 +142,10 @@ def apply_peptide_matches(
     for name, match in matches.items():
         level_name = name
         result.levels[level_name].varm[FASTA_VALIDATION_NAME] = match.summary.clone()
-        level_metadata = result.levels[level_name].metadata
-        level_metadata["fasta"] = {
-            PEPTIDE_VERIFICATION_OPERATION: cast(dict[str, JsonValue], asdict(match.coverage))
-        }
+        level = result.levels[level_name]
+        level.metadata["fasta"] = _merged(
+            _level_record(level, level_name), _peptide_record(match.coverage)
+        )
     _record_operation_metadata(
         result,
         PEPTIDE_VERIFICATION_OPERATION,
@@ -171,6 +174,10 @@ def apply_protein_group_match(
     validate_protein_output_names(parsed)
     result = deepcopy(parsed)
     result.levels["protein"].varm[FASTA_SUMMARY_NAME] = match.summary.clone()
+    protein = result.levels["protein"]
+    protein.metadata["fasta"] = _merged(
+        _level_record(protein, "protein"), _protein_record(match.coverage)
+    )
     result = result.with_annotation_table(
         MEMBER_TABLE_NAME,
         match.members.clone(),
@@ -214,6 +221,11 @@ def apply_peptide_properties(
     result = deepcopy(parsed)
     for name, frame in properties.items():
         result.levels[name].varm[PEPTIDE_PROPERTIES_NAME] = frame.clone()
+        level = result.levels[name]
+        level.metadata["fasta"] = _merged(
+            _level_record(level, name),
+            {"details": [{"slot": "varm", "name": PEPTIDE_PROPERTIES_NAME}]},
+        )
     _record_operation_metadata(
         result,
         PEPTIDE_PROPERTIES_OPERATION,
@@ -269,7 +281,7 @@ def _record_operation_metadata(
     existing = parsed.metadata.get("fasta")
     metadata: dict[str, JsonValue]
     if existing is None:
-        metadata = {"schema_version": "3", "provenance": {}}
+        metadata = {"schema_version": FASTA_SCHEMA_VERSION, "provenance": {}}
     else:
         metadata = cast(dict[str, JsonValue], deepcopy(existing))
     provenance = metadata.setdefault("provenance", {})
@@ -277,6 +289,90 @@ def _record_operation_metadata(
         raise FastaAnnotationError("result FASTA provenance is not an object")
     provenance[operation] = operation_metadata
     parsed.metadata["fasta"] = metadata
+
+
+def _level_record(level: ParsedLevel, name: str) -> dict[str, JsonValue]:
+    """One level's FASTA record so far; absent until an operation writes it."""
+    record = level.metadata.get("fasta", {})
+    if not isinstance(record, dict):
+        raise FastaAnnotationError(f"level {name!r} FASTA record is not an object")
+    return record
+
+
+def _merged(record: dict[str, JsonValue], addition: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """A level's FASTA record with one more operation's result, summary and tables."""
+    merged = dict(record)
+    for field, value in addition.items():
+        previous = record.get(field)
+        if previous is None:
+            merged[field] = value
+        elif isinstance(previous, dict) and isinstance(value, dict):
+            merged[field] = {**previous, **value}
+        elif isinstance(previous, list) and isinstance(value, list):
+            merged[field] = [*previous, *value]
+        else:
+            raise FastaAnnotationError(f"level FASTA record field {field!r} has another type")
+    return merged
+
+
+def _peptide_record(coverage: PeptideCoverage) -> dict[str, JsonValue]:
+    """A peptide level's FASTA record: the verification result, its summary and its table."""
+    return {
+        "result": {PEPTIDE_VERIFICATION_OPERATION: cast(dict[str, JsonValue], asdict(coverage))},
+        "summary": [
+            _count("matched_features", "Peptides in the FASTA", coverage.matched_feature_count),
+            _count(
+                "unmatched_features",
+                "Unmatched peptides",
+                coverage.unmatched_feature_count,
+                problem=True,
+            ),
+            _count("decoy_features", "Decoy peptides", coverage.decoy_feature_count),
+        ],
+        "details": [{"slot": "varm", "name": FASTA_VALIDATION_NAME}],
+    }
+
+
+def _protein_record(coverage: ProteinGroupCoverage) -> dict[str, JsonValue]:
+    """The protein level's FASTA record: member coverage, its summary and its tables."""
+    return {
+        "result": {PROTEIN_ANNOTATION_OPERATION: cast(dict[str, JsonValue], asdict(coverage))},
+        "summary": [
+            _count(
+                "matched_members",
+                "Protein-group members in the FASTA",
+                coverage.matched_member_count,
+                unit="members",
+            ),
+            _count(
+                "unmatched_members",
+                "Protein-group members absent from the FASTA",
+                coverage.unmatched_member_count,
+                unit="members",
+                problem=True,
+            ),
+            _count(
+                "ambiguous_members",
+                "Ambiguous protein-group members",
+                coverage.ambiguous_member_count,
+                unit="members",
+                problem=True,
+            ),
+        ],
+        "details": [
+            {"slot": "varm", "name": FASTA_SUMMARY_NAME},
+            {"slot": "annotation_tables", "name": MEMBER_TABLE_NAME},
+            {"slot": "feature_relations", "name": MEMBER_RELATION_NAME},
+        ],
+    }
+
+
+def _count(
+    name: str, label: str, value: int, *, unit: str = "features", problem: bool = False
+) -> JsonValue:
+    """One count; a count of problems is ``attention`` above zero."""
+    status = "attention" if problem and value else "ok"
+    return {"name": name, "label": label, "value": value, "unit": unit, "status": status}
 
 
 def _role_column(roles: dict[str, str], frame: pl.DataFrame, role: str) -> str | None:

@@ -55,7 +55,7 @@ The member table keeps `protein_group`, `protein_member`, `member_ordinal`, `mat
 
 ## Provenance
 
-FASTA metadata schema 2 groups root sources and settings under `fasta.provenance.peptide_verification` or `fasta.provenance.protein_annotation`: source paths, checksums, ordinals, database identity, separator and requested/resolved Prozor backend. Per-level validation summaries remain under `fasta.peptide_verification` or `fasta.protein_annotation`; aligned results remain in `varm`. MuData stores provenance once in its root `uns["apb"]["fasta"]`, never in each modality. Standalone H5AD combines provenance and its own operation summaries in one `uns["apb"]["fasta"]` tree. Applying the same operation twice is refused rather than silently re-recorded.
+FASTA metadata schema 4 groups root sources and settings under `fasta.provenance.peptide_verification`, `fasta.provenance.protein_annotation` or `fasta.provenance.peptide_properties`: source paths, checksums, ordinals, database identity, separator and requested/resolved Prozor backend. Each checked level carries its own `fasta` record: `result.peptide_verification` on peptide-derived levels and `result.protein_annotation` on the protein level, a `summary` of matched, unmatched and decoy peptides or matched, unmatched and ambiguous members, and `details` naming the `varm` tables, member table and relation that hold the per-feature evidence. MuData stores provenance once in its root `uns["apb"]["fasta"]` and each level's record in that modality; a standalone H5AD keeps the same two parts, with the level's under `uns[<level>]["apb"]`. Applying the same operation twice is refused rather than silently re-recorded.
 
 ## Required protein-frame columns
 

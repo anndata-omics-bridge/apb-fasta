@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 import pytest
-from apb2.api import ParsedLevel, ParsedLevels, read_parsed_levels, write_parsed_levels
+from apb2.api import JsonValue, ParsedLevel, ParsedLevels, read_parsed_levels, write_parsed_levels
 from protein_fasta.api import ProteinDatabase, refseq, uniprotkb
 
 from apb_fasta.api import FastaAnnotator, add_peptide_properties
@@ -107,9 +109,40 @@ def test_annotate_verifies_peptides_and_merges_annotations_without_mutating_inpu
     metadata = result.parsed.metadata["fasta"]
     assert isinstance(metadata, dict)
     assert set(metadata) == {"schema_version", "provenance"}
-    assert metadata["schema_version"] == "3"
+    assert metadata["schema_version"] == "4"
     assert isinstance(metadata["provenance"], dict)
     assert set(metadata["provenance"]) == {"peptide_verification", "protein_annotation"}
+    coverage = result.reports.peptide_levels["peptide"]
+    peptide = result.parsed.levels["peptide"].metadata["fasta"]
+    assert isinstance(peptide, dict)
+    assert peptide["details"] == [{"slot": "varm", "name": "fasta_validation"}]
+    assert _summary(peptide) == [
+        ("matched_features", coverage.matched_feature_count, "ok"),
+        (
+            "unmatched_features",
+            coverage.unmatched_feature_count,
+            _problem(coverage.unmatched_feature_count),
+        ),
+        ("decoy_features", coverage.decoy_feature_count, "ok"),
+    ]
+    groups = result.reports.protein_groups
+    protein = result.parsed.levels["protein"].metadata["fasta"]
+    assert isinstance(protein, dict)
+    assert protein["result"] == {"protein_annotation": asdict(groups)}
+    assert _summary(protein) == [
+        ("matched_members", 2, "ok"),
+        (
+            "unmatched_members",
+            groups.unmatched_member_count,
+            _problem(groups.unmatched_member_count),
+        ),
+        ("ambiguous_members", 1, "attention"),
+    ]
+    assert protein["details"] == [
+        {"slot": "varm", "name": "fasta"},
+        {"slot": "annotation_tables", "name": "fasta_protein_group_members"},
+        {"slot": "feature_relations", "name": "fasta_protein_group_membership"},
+    ]
 
 
 def test_operations_run_independently() -> None:
@@ -365,6 +398,12 @@ def test_peptide_properties_compose_with_fasta_annotation() -> None:
     complete = add_peptide_properties(annotated)
 
     assert set(complete.levels["peptide"].varm) == {"fasta_validation", "peptide_properties"}
+    record = complete.levels["peptide"].metadata["fasta"]
+    assert isinstance(record, dict)
+    assert record["details"] == [
+        {"slot": "varm", "name": "fasta_validation"},
+        {"slot": "varm", "name": "peptide_properties"},
+    ]
     metadata = complete.metadata["fasta"]
     assert isinstance(metadata, dict)
     assert isinstance(metadata["provenance"], dict)
@@ -372,6 +411,24 @@ def test_peptide_properties_compose_with_fasta_annotation() -> None:
         "peptide_verification",
         "protein_annotation",
         "peptide_properties",
+    }
+
+
+def test_peptide_verification_after_properties_keeps_both_tables() -> None:
+    with_properties = add_peptide_properties(_parsed())
+
+    verified = FastaAnnotator(_proteins()).annotate(with_properties).parsed
+
+    record = verified.levels["peptide"].metadata["fasta"]
+    assert isinstance(record, dict)
+    assert record["details"] == [
+        {"slot": "varm", "name": "peptide_properties"},
+        {"slot": "varm", "name": "fasta_validation"},
+    ]
+    assert set(_summary_names(record)) == {
+        "matched_features",
+        "unmatched_features",
+        "decoy_features",
     }
 
 
@@ -404,3 +461,21 @@ def test_peptide_properties_round_trip_through_multilevel_formats(
     assert properties.get_column("length").to_list() == [7, None, 7]
     assert properties.get_column("c_terminal_residue").to_list() == ["E", None, "G"]
     assert properties.get_column("contains_tryptophan").to_list() == [False, None, False]
+
+
+def _summary(record: dict[str, JsonValue]) -> list[tuple[Any, Any, Any]]:
+    entries = record["summary"]
+    assert isinstance(entries, list)
+    return [
+        (entry["name"], entry["value"], entry["status"])
+        for entry in entries
+        if isinstance(entry, dict)
+    ]
+
+
+def _problem(count: int) -> str:
+    return "attention" if count else "ok"
+
+
+def _summary_names(record: dict[str, JsonValue]) -> list[Any]:
+    return [name for name, _, _ in _summary(record)]
