@@ -9,6 +9,15 @@ from polars.testing import assert_frame_equal
 from apb_fasta.calculation.matching import PeptideLevelInput, match_peptide_levels
 from apb_fasta.calculation.results import PeptideCoverage, PeptideLevelMatch
 
+_LEADING = [
+    "reported_leading_id",
+    "reported_leading_accession",
+    "reported_leading_description",
+    "reported_leading_gene_name",
+    "reported_leading_protein_length",
+    "reported_leading_tryptic_peptides",
+]
+
 
 def _proteins() -> pl.DataFrame:
     return pl.DataFrame(
@@ -24,6 +33,7 @@ def _match(
     frame: pl.DataFrame,
     *,
     assignment: str | None = "assignment",
+    leading: str | None = None,
     proteins: pl.DataFrame | None = None,
     backend: str = "auto",
     separator: str = ";",
@@ -31,7 +41,7 @@ def _match(
     if "decoy" not in frame.columns:
         frame = frame.with_columns(pl.lit(value=False).alias("decoy"))
     return match_peptide_levels(
-        {"ion": PeptideLevelInput(frame, "peptide", assignment, "decoy")},
+        {"ion": PeptideLevelInput(frame, "peptide", assignment, "decoy", leading)},
         _proteins() if proteins is None else proteins,
         backend=backend,
         protein_group_separator=separator,
@@ -73,7 +83,8 @@ def test_duplicate_records_sites_assignments_and_feature_order(backend: str) -> 
             "fasta_il_only": pl.Boolean,
         },
     )
-    assert_frame_equal(result.summary, expected)
+    assert result.summary.columns == [*expected.columns, *_LEADING]
+    assert_frame_equal(result.summary.select(expected.columns), expected)
     assert result.coverage == PeptideCoverage(8, 5, 5, 3, 9, 0, 0)
 
 
@@ -170,8 +181,8 @@ def test_multilevel_coverage_counts_sequences_per_level() -> None:
         {"peptide": ["AA", "aa"], "assignment": ["a|a", "p1"], "decoy": [False, False]}
     )
     levels = {
-        "ion": PeptideLevelInput(frame, "peptide", "assignment", "decoy"),
-        "peptide": PeptideLevelInput(frame.head(1), "peptide", "assignment", "decoy"),
+        "ion": PeptideLevelInput(frame, "peptide", "assignment", "decoy", None),
+        "peptide": PeptideLevelInput(frame.head(1), "peptide", "assignment", "decoy", None),
     }
     result = match_peptide_levels(levels, _proteins(), backend="auto", protein_group_separator="|")
     assert result["ion"].coverage == PeptideCoverage(2, 1, 2, 0, 4, 0, 0)
@@ -216,3 +227,60 @@ def test_other_il_spellings_fill_only_what_exact_matching_misses(backend: str) -
     ]
     assert summary["fasta_il_only"].to_list() == [False, True, False, True, False, True]
     assert result.coverage == PeptideCoverage(6, 4, 4, 1, 3, 1, 1)
+
+
+def test_leading_protein_is_the_first_reported_member_found_by_id_or_accession() -> None:
+    proteins = pl.DataFrame(
+        {
+            "id": ["sp|P1|ONE_HUMAN", "sp|P2|TWO_HUMAN", "sp|P2|TWO_HUMAN"],
+            "accession": ["P1", "P2", "P2"],
+            "description": ["One OS=Homo sapiens GN=ONE", "Two", "Two again"],
+            "gene_name": ["ONE", None, None],
+            "sequence": ["MKGLPRAKSHGSTGWGKRKRNKPK", "MPEPTIDEKAACLLKR", "AAAA"],
+        }
+    )
+    frame = pl.DataFrame(
+        {
+            "peptide": ["GLPR", "AACLLK", "AACLLK", "GLPR", "GLPR"],
+            "group": [" P2 ; P1", "sp|P1|ONE_HUMAN", "unknown;P1", None, ""],
+        }
+    )
+
+    summary = _match(frame, assignment=None, leading="group", proteins=proteins).summary
+
+    expected = pl.DataFrame(
+        {
+            "reported_leading_id": ["sp|P2|TWO_HUMAN", "sp|P1|ONE_HUMAN", None, None, None],
+            "reported_leading_accession": ["P2", "P1", None, None, None],
+            "reported_leading_description": ["Two", "One OS=Homo sapiens GN=ONE", None, None, None],
+            "reported_leading_gene_name": [None, "ONE", None, None, None],
+            "reported_leading_protein_length": [16, 24, None, None, None],
+            "reported_leading_tryptic_peptides": [1, 1, None, None, None],
+        },
+        schema_overrides={
+            "reported_leading_gene_name": pl.String,
+            "reported_leading_protein_length": pl.UInt64,
+            "reported_leading_tryptic_peptides": pl.UInt64,
+        },
+    )
+    assert_frame_equal(summary.select(_LEADING), expected)
+
+
+@pytest.mark.parametrize(
+    ("sequence", "count"),
+    [
+        # prolfquapp's nr_tryptic_peptides(min_length = 7, max_length = 30) on each sequence
+        ("MKGLPRAKSHGSTGWGKRKRNKPK", 1),
+        ("AAAAAAAKPAAAAAAARAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKAAAAAAAK", 2),
+        ("kkkkaaaaaaar", 1),
+        ("AAAAAA", 0),
+    ],
+)
+def test_leading_protein_counts_tryptic_peptides_as_prolfquapp(sequence: str, count: int) -> None:
+    proteins = pl.DataFrame({"id": ["P1"], "sequence": [sequence]})
+    frame = pl.DataFrame({"peptide": ["AA"], "group": ["P1"]})
+
+    summary = _match(frame, assignment=None, leading="group", proteins=proteins).summary
+
+    assert summary["reported_leading_tryptic_peptides"].to_list() == [count]
+    assert summary["reported_leading_accession"].to_list() == [None]

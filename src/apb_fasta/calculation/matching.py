@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from itertools import product
+from itertools import pairwise, product
 
 import polars as pl
 from prozor.api import annotate_peptides
 
 from apb_fasta.calculation.results import PeptideCoverage, PeptideLevelMatch
+
+# prolfquapp's tryptic peptides: cleaved after K or R unless P follows, 7 to 29 residues long.
+_TRYPTIC_CLEAVAGE = re.compile(r"[KR](?!P|$)")
+_TRYPTIC_LENGTHS = range(7, 30)
+_LEADING_TEXT = {
+    "reported_leading_id": "id",
+    "reported_leading_accession": "accession",
+    "reported_leading_description": "description",
+    "reported_leading_gene_name": "gene_name",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +31,8 @@ class PeptideLevelInput:
     sequence_column: str
     accession_column: str | None
     decoy_column: str
+    protein_assignment_column: str | None
+    """The feature's protein group; its first member is the leading protein."""
 
 
 def match_peptide_levels(
@@ -39,7 +52,9 @@ def match_peptide_levels(
     """
     if not levels:
         return {}
-    prepared = {name: _prepare_features(level) for name, level in levels.items()}
+    prepared = {
+        name: _prepare_features(level, protein_group_separator) for name, level in levels.items()
+    }
     peptides = (
         pl.concat([frame.select("peptide") for frame in prepared.values()])
         .drop_nulls()
@@ -51,7 +66,9 @@ def match_peptide_levels(
         raise ValueError("protein frame column 'sequence' contains a non-text value")
     database = dict(zip(map(str, range(sequences.len())), sequences.to_list(), strict=True))
     exact = _occurrences(peptides.to_list(), database, backend)
-    assignments = _reported_assignments(prepared, proteins, protein_group_separator)
+    members = _member_records(proteins)
+    assignments = _reported_assignments(prepared, members, protein_group_separator)
+    leading = _leading_proteins(prepared, proteins, members)
     spellings = _il_spellings(_fallback_peptides(prepared, peptides, exact, assignments))
     il = (
         _occurrences(
@@ -98,7 +115,9 @@ def match_peptide_levels(
         il_records, on="peptide", how="left"
     )
     return {
-        name: _level_match(frame, matches, assignments, levels[name].accession_column is not None)
+        name: _level_match(
+            frame, matches, assignments, leading, levels[name].accession_column is not None
+        )
         for name, frame in prepared.items()
     }
 
@@ -174,22 +193,31 @@ def _il_spellings(peptides: pl.Series) -> pl.DataFrame:
     )
 
 
-def _prepare_features(level: PeptideLevelInput) -> pl.DataFrame:
+def _prepare_features(level: PeptideLevelInput, separator: str) -> pl.DataFrame:
     sequence = _text_column(level.frame, level.sequence_column).str.strip_chars().str.to_uppercase()
-    # with_columns keeps the source height even when both expressions are scalar nulls.
+    leading = (
+        _text_column(level.frame, level.protein_assignment_column)
+        .str.split(separator)
+        .list.first()
+        .str.strip_chars()
+    )
+    # with_columns keeps the source height even when the expressions are scalar nulls.
     return level.frame.with_columns(
         sequence.alias("peptide"),
         _text_column(level.frame, level.accession_column).alias("assignment"),
+        leading.alias("leading_member"),
     ).select(
         pl.when(pl.col("peptide") != "").then(pl.col("peptide")).alias("peptide"),
         "assignment",
+        pl.when(pl.col("leading_member") != "")
+        .then(pl.col("leading_member"))
+        .alias("leading_member"),
         pl.col(level.decoy_column).fill_null(value=False).alias("decoy"),
     )
 
 
-def _reported_assignments(
-    prepared: Mapping[str, pl.DataFrame], proteins: pl.DataFrame, separator: str
-) -> pl.DataFrame:
+def _member_records(proteins: pl.DataFrame) -> pl.DataFrame:
+    """The protein records each reported member names, through their id or accession."""
     aliases = pl.concat(
         [
             proteins.with_columns(_text_column(proteins, column).alias("member"))
@@ -199,12 +227,56 @@ def _reported_assignments(
             if column in proteins.columns
         ]
     )
-    aliases = (
+    return (
         aliases.filter(pl.col("member").is_not_null() & (pl.col("member") != ""))
         .unique()
         .group_by("member")
         .agg("record")
     )
+
+
+def _leading_proteins(
+    prepared: Mapping[str, pl.DataFrame], proteins: pl.DataFrame, members: pl.DataFrame
+) -> pl.DataFrame:
+    """The first FASTA record each leading member names, as prolfquapp annotates a protein."""
+    columns = set(proteins.columns)
+    records = proteins.select(
+        *(
+            _text_column(proteins, column if column in columns else None).alias(name)
+            for name, column in _LEADING_TEXT.items()
+        ),
+        _text_column(proteins, "sequence").alias("sequence"),
+    ).with_row_index("record")
+    return (
+        pl.concat([frame.select("leading_member") for frame in prepared.values()])
+        .drop_nulls()
+        .unique()
+        .join(members, left_on="leading_member", right_on="member")
+        .select("leading_member", pl.col("record").list.min())
+        .join(records, on="record")
+        .select(
+            "leading_member",
+            *_LEADING_TEXT,
+            pl.col("sequence")
+            .str.len_chars()
+            .cast(pl.UInt64)
+            .alias("reported_leading_protein_length"),
+            pl.col("sequence")
+            .map_elements(_tryptic_peptides, return_dtype=pl.UInt64)
+            .alias("reported_leading_tryptic_peptides"),
+        )
+    )
+
+
+def _tryptic_peptides(sequence: str) -> int:
+    ends = [match.end() for match in _TRYPTIC_CLEAVAGE.finditer(sequence.upper())]
+    ends.append(len(sequence))
+    return sum(end - start in _TRYPTIC_LENGTHS for start, end in pairwise([0, *ends]))
+
+
+def _reported_assignments(
+    prepared: Mapping[str, pl.DataFrame], aliases: pl.DataFrame, separator: str
+) -> pl.DataFrame:
     assignments = (
         pl.concat([frame.select("assignment") for frame in prepared.values()]).drop_nulls().unique()
     )
@@ -239,10 +311,13 @@ def _level_match(
     features: pl.DataFrame,
     matches: pl.DataFrame,
     assignments: pl.DataFrame,
+    leading: pl.DataFrame,
     has_assignment: bool,
 ) -> PeptideLevelMatch:
-    joined = features.join(matches, on="peptide", how="left", maintain_order="left").join(
-        assignments, on="assignment", how="left", maintain_order="left"
+    joined = (
+        features.join(matches, on="peptide", how="left", maintain_order="left")
+        .join(assignments, on="assignment", how="left", maintain_order="left")
+        .join(leading, on="leading_member", how="left", maintain_order="left")
     )
     reported = pl.col("reported_records").fill_null([])
     in_matched = pl.col("matched_records").fill_null([]).list.set_intersection(reported).list.len()
@@ -259,6 +334,7 @@ def _level_match(
         pl.col("reported_members_in_fasta_count").fill_null(0),
         ((in_matched > 0) | (in_il > 0)).alias("peptide_in_reported_protein"),
         (il_only_match | ((in_il > 0) & (in_matched == 0))).alias("fasta_il_only"),
+        *leading.columns[1:],
     )
     if not has_assignment:
         summary = summary.with_columns(

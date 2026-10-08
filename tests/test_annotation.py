@@ -45,7 +45,7 @@ def _parsed() -> ParsedLevels:
             }
         ),
         ("ProForma_peptide",),
-        {"fasta_accessions": "Proteins"},
+        {"fasta_accessions": "Proteins", "protein_assignment": "Proteins"},
     )
     protein = _level(
         "protein",
@@ -93,6 +93,13 @@ def test_annotate_verifies_peptides_and_merges_annotations_without_mutating_inpu
     assert "fasta_protein_group_members" in result.parsed.annotation_tables
     assert "fasta_protein_group_membership" in result.parsed.feature_relations
     assert result.reports.peptide_levels["peptide"].matched_feature_count == 2
+    validation = result.parsed.levels["peptide"].varm["fasta_validation"]
+    # P2 names a target and a decoy record; the leading protein is the first in the FASTA.
+    assert validation["reported_leading_description"].to_list() == [
+        "Protein one",
+        "Protein two",
+        None,
+    ]
     assert result.reports.protein_groups is not None
     assert result.reports.protein_groups.member_count == 4
     assert result.reports.protein_groups.matched_member_count == 2

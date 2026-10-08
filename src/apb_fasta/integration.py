@@ -62,8 +62,11 @@ def peptide_inputs(parsed: ParsedLevels, /) -> dict[str, PeptideLevelInput]:
         result[name] = PeptideLevelInput(
             frame=level.var.frame,
             sequence_column=_PEPTIDE_COLUMN,
-            accession_column=_fasta_accession_column(level.var.roles, level.var.frame),
+            accession_column=_role_column(level.var.roles, level.var.frame, "fasta_accessions"),
             decoy_column=_DECOY_COLUMN,
+            protein_assignment_column=_role_column(
+                level.var.roles, level.var.frame, "protein_assignment"
+            ),
         )
     return result
 
@@ -73,7 +76,7 @@ def protein_group_input(parsed: ParsedLevels, /) -> ProteinGroupInput | None:
     level = parsed.levels.get("protein")
     if level is None:
         return None
-    accession_column = _fasta_accession_column(level.var.roles, level.var.frame)
+    accession_column = _role_column(level.var.roles, level.var.frame, "fasta_accessions")
     if accession_column is None:
         raise FastaAnnotationError("protein level does not declare column_roles.fasta_accessions")
     collisions = _RESERVED_MEMBER_COLUMNS.intersection(level.var.key_columns)
@@ -276,11 +279,8 @@ def _record_operation_metadata(
     parsed.metadata["fasta"] = metadata
 
 
-def _fasta_accession_column(
-    roles: dict[str, str],
-    frame: pl.DataFrame,
-) -> str | None:
-    value = roles.get("fasta_accessions")
+def _role_column(roles: dict[str, str], frame: pl.DataFrame, role: str) -> str | None:
+    value = roles.get(role)
     return value if isinstance(value, str) and value in frame.columns else None
 
 
