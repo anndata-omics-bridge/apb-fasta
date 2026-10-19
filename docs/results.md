@@ -16,6 +16,8 @@ Writes a feature-aligned `varm["fasta_validation"]` table on every peptide-deriv
 | `fasta_matches_contaminant` | Boolean | A matching protein is a contaminant (`is_contaminant`) |
 | `reported_member_count` | UInt64 | Protein-group members the result reported |
 | `reported_members_in_fasta_count` | UInt64 | Reported members found in the database |
+| `reported_member_organisms` | String | Sorted, `;`-joined organism mnemonics of the reported members found |
+| `reported_members_contaminant` | Boolean | A reported member found is a contaminant |
 | `peptide_in_reported_protein` | Boolean | The sequence occurs in a reported member |
 | `fasta_il_only` | Boolean | `peptide_in_fasta` or `peptide_in_reported_protein` holds only for another I/L spelling |
 | `reported_leading_id` | String | FASTA `id` of the leading protein, e.g. `sp\|P02768\|ALBU_HUMAN` |
@@ -25,9 +27,11 @@ Writes a feature-aligned `varm["fasta_validation"]` table on every peptide-deriv
 | `reported_leading_protein_length` | UInt64 | Its sequence length |
 | `reported_leading_tryptic_peptides` | UInt64 | Its tryptic peptides of 7 to 29 residues, cleaved after K or R unless P follows |
 
-The three `reported_*` and `peptide_in_reported_protein` columns are null when the level reports no protein group, which distinguishes "not reported" from "reported and unmatched".
+The four `reported_member*` columns and `peptide_in_reported_protein` are null when the level reports no protein group, which distinguishes "not reported" from "reported and unmatched".
 
-The leading protein is the first member of the level's `protein_assignment` column, found by FASTA id or accession; the first such record in the FASTA wins. Its six `reported_leading_*` columns carry what prolfquapp reads from a FASTA for a protein, counted as prolfquapp's `get_annot_from_fasta` counts; they are null when the level declares no `protein_assignment` or the FASTA lacks that member.
+The leading protein is the first member of the level's `protein_assignment` column, found as any reported member is; the first such record in the FASTA wins. Its six `reported_leading_*` columns carry what prolfquapp reads from a FASTA for a protein, counted as prolfquapp's `get_annot_from_fasta` counts; they are null when the level declares no `protein_assignment` or the FASTA lacks that member.
+
+Reported members are read from apb2's `;`-separated protein lists. A member names a FASTA record by its id, accession or entry name, or, for a `db|ACC|NAME` id, by `ACC|NAME` as PEAKS writes it or by `ACC`, which keeps a contaminant's `Cont_` prefix.
 
 Mass spectrometry cannot tell isoleucine from leucine, so a vendor may spell a peptide differently from its FASTA protein. Protein sequences are matched as read. A peptide that occurs exactly keeps exactly its proteins; its other I/L spellings are tried only when it occurs nowhere, or in no reported member the database contains. In the first case the spellings' matches become its proteins; in the second they count only toward `peptide_in_reported_protein`. Coverage counts the targets matched through another spelling as `il_only_matched_feature_count`.
 
@@ -55,7 +59,7 @@ The member table keeps `protein_group`, `protein_member`, `member_ordinal`, `mat
 
 ## Provenance
 
-FASTA metadata schema 4 groups root sources and settings under `fasta.provenance.peptide_verification`, `fasta.provenance.protein_annotation` or `fasta.provenance.peptide_properties`: source paths, checksums, ordinals, database identity, separator and requested/resolved Prozor backend. Each checked level carries its own `fasta` record: `result.peptide_verification` on peptide-derived levels and `result.protein_annotation` on the protein level, a `summary` of matched, unmatched and decoy peptides or matched, unmatched and ambiguous members, and `details` naming the `varm` tables, member table and relation that hold the per-feature evidence. MuData stores provenance once in its root `uns["apb"]["fasta"]` and each level's record in that modality; a standalone H5AD keeps the same two parts, with the level's under `uns[<level>]["apb"]`. Applying the same operation twice is refused rather than silently re-recorded.
+FASTA metadata schema 4 groups root sources and settings under `fasta.provenance.peptide_verification`, `fasta.provenance.protein_annotation` or `fasta.provenance.peptide_properties`: source paths, checksums, ordinals, database identity and requested/resolved Prozor backend. Each checked level carries its own `fasta` record: `result.peptide_verification` on peptide-derived levels and `result.protein_annotation` on the protein level, a `summary` of matched, unmatched and decoy peptides or matched, unmatched and ambiguous members, and `details` naming the `varm` tables, member table and relation that hold the per-feature evidence. MuData stores provenance once in its root `uns["apb"]["fasta"]` and each level's record in that modality; a standalone H5AD keeps the same two parts, with the level's under `uns[<level>]["apb"]`. Applying the same operation twice is refused rather than silently re-recorded.
 
 ## Required protein-frame columns
 

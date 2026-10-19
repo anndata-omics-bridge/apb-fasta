@@ -21,6 +21,8 @@ _LEADING_TEXT = {
     "reported_leading_description": "description",
     "reported_leading_gene_name": "gene_name",
 }
+_ORGANISMS = pl.col("organism").drop_nulls().unique().sort().str.join(";")
+_CONTAMINANT = pl.col("is_contaminant").any()
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +43,6 @@ def match_peptide_levels(
     /,
     *,
     backend: str,
-    protein_group_separator: str,
 ) -> dict[str, PeptideLevelMatch]:
     """Match distinct peptides exactly, then try other I/L spellings for the misses.
 
@@ -52,9 +53,7 @@ def match_peptide_levels(
     """
     if not levels:
         return {}
-    prepared = {
-        name: _prepare_features(level, protein_group_separator) for name, level in levels.items()
-    }
+    prepared = {name: _prepare_features(level) for name, level in levels.items()}
     peptides = (
         pl.concat([frame.select("peptide") for frame in prepared.values()])
         .drop_nulls()
@@ -66,8 +65,16 @@ def match_peptide_levels(
         raise ValueError("protein frame column 'sequence' contains a non-text value")
     database = dict(zip(map(str, range(sequences.len())), sequences.to_list(), strict=True))
     exact = _occurrences(peptides.to_list(), database, backend)
-    members = _member_records(proteins)
-    assignments = _reported_assignments(prepared, members, protein_group_separator)
+    members = member_records(proteins)
+    columns = set(proteins.columns)
+    indexed = proteins.select(
+        id=_text_column(proteins, "id"),
+        organism=_text_column(
+            proteins, "organism_mnemonic" if "organism_mnemonic" in columns else None
+        ),
+        is_contaminant=pl.col("is_contaminant") if "is_contaminant" in columns else pl.lit(False),
+    ).with_row_index("record")
+    assignments = _reported_assignments(prepared, members, indexed)
     leading = _leading_proteins(prepared, proteins, members)
     spellings = _il_spellings(_fallback_peptides(prepared, peptides, exact, assignments))
     il = (
@@ -91,14 +98,6 @@ def match_peptide_levels(
         pl.col("il_only_match").first(),
     )
     il_records = il.unique().group_by("peptide").agg(pl.col("record").alias("il_records"))
-    columns = set(proteins.columns)
-    indexed = proteins.select(
-        id=_text_column(proteins, "id"),
-        organism=_text_column(
-            proteins, "organism_mnemonic" if "organism_mnemonic" in columns else None
-        ),
-        is_contaminant=pl.col("is_contaminant") if "is_contaminant" in columns else pl.lit(False),
-    ).with_row_index("record")
     distinct = occurrences.unique(maintain_order=True).join(
         indexed, on="record", how="left", maintain_order="left"
     )
@@ -108,8 +107,8 @@ def match_peptide_levels(
         pl.col("record").alias("matched_records"),
         pl.len().cast(pl.UInt64).alias("fasta_matching_protein_count"),
         pl.col("id").str.join(";").alias("fasta_matching_protein_ids"),
-        fasta_matching_organisms=pl.col("organism").drop_nulls().unique().sort().str.join(";"),
-        fasta_matches_contaminant=pl.col("is_contaminant").any(),
+        fasta_matching_organisms=_ORGANISMS,
+        fasta_matches_contaminant=_CONTAMINANT,
     )
     matches = matches.join(site_counts, on="peptide", how="left").join(
         il_records, on="peptide", how="left"
@@ -193,11 +192,11 @@ def _il_spellings(peptides: pl.Series) -> pl.DataFrame:
     )
 
 
-def _prepare_features(level: PeptideLevelInput, separator: str) -> pl.DataFrame:
+def _prepare_features(level: PeptideLevelInput) -> pl.DataFrame:
     sequence = _text_column(level.frame, level.sequence_column).str.strip_chars().str.to_uppercase()
     leading = (
         _text_column(level.frame, level.protein_assignment_column)
-        .str.split(separator)
+        .str.split(";")
         .list.first()
         .str.strip_chars()
     )
@@ -216,15 +215,24 @@ def _prepare_features(level: PeptideLevelInput, separator: str) -> pl.DataFrame:
     )
 
 
-def _member_records(proteins: pl.DataFrame) -> pl.DataFrame:
-    """The protein records each reported member names, through their id or accession."""
+def member_records(proteins: pl.DataFrame) -> pl.DataFrame:
+    """The protein records each reported member names, as vendors write them.
+
+    A member names a record by its id, accession or entry name, or, for a ``db|ACC|NAME`` id,
+    by ``ACC|NAME`` (PEAKS) or ``ACC``, which keeps a contaminant's ``Cont_`` prefix.
+    """
+    identifier = _text_column(proteins, "id")
+    fields = identifier.str.split("|")
+    three = fields.list.len() == 3
     aliases = pl.concat(
         [
-            proteins.with_columns(_text_column(proteins, column).alias("member"))
-            .select("member")
-            .with_row_index("record")
-            for column in ("id", "accession")
-            if column in proteins.columns
+            proteins.with_columns(alias.alias("member")).select("member").with_row_index("record")
+            for alias in (
+                identifier,
+                *(_text_column(proteins, c) for c in ("accession", "entry_name") if c in proteins),
+                pl.when(three).then(fields.list.slice(1).list.join("|")),
+                pl.when(three).then(fields.list.get(1, null_on_oob=True)),
+            )
         ]
     )
     return (
@@ -275,15 +283,16 @@ def _tryptic_peptides(sequence: str) -> int:
 
 
 def _reported_assignments(
-    prepared: Mapping[str, pl.DataFrame], aliases: pl.DataFrame, separator: str
+    prepared: Mapping[str, pl.DataFrame], aliases: pl.DataFrame, indexed: pl.DataFrame
 ) -> pl.DataFrame:
+    """Each reported protein list's members, those the FASTA holds, and their organisms."""
     assignments = (
-        pl.concat([frame.select("assignment") for frame in prepared.values()]).drop_nulls().unique()
-    )
-    return (
-        assignments.with_columns(
+        pl.concat([frame.select("assignment") for frame in prepared.values()])
+        .drop_nulls()
+        .unique()
+        .with_columns(
             pl.col("assignment")
-            .str.split(separator)
+            .str.split(";")
             .list.eval(pl.element().str.strip_chars())
             .alias("member")
         )
@@ -305,6 +314,14 @@ def _reported_assignments(
             .alias("reported_records"),
         )
     )
+    found = (
+        assignments.select("assignment", "reported_records")
+        .explode("reported_records", empty_as_null=False)
+        .join(indexed, left_on="reported_records", right_on="record")
+        .group_by("assignment")
+        .agg(reported_member_organisms=_ORGANISMS, reported_members_contaminant=_CONTAMINANT)
+    )
+    return assignments.join(found, on="assignment", how="left")
 
 
 def _level_match(
@@ -332,6 +349,8 @@ def _level_match(
         pl.col("fasta_matches_contaminant").fill_null(False),
         pl.col("reported_member_count").fill_null(0),
         pl.col("reported_members_in_fasta_count").fill_null(0),
+        pl.col("reported_member_organisms").fill_null(""),
+        pl.col("reported_members_contaminant").fill_null(False),
         ((in_matched > 0) | (in_il > 0)).alias("peptide_in_reported_protein"),
         (il_only_match | ((in_il > 0) & (in_matched == 0))).alias("fasta_il_only"),
         *leading.columns[1:],
@@ -340,6 +359,8 @@ def _level_match(
         summary = summary.with_columns(
             pl.lit(None, dtype=pl.UInt64).alias("reported_member_count"),
             pl.lit(None, dtype=pl.UInt64).alias("reported_members_in_fasta_count"),
+            pl.lit(None, dtype=pl.String).alias("reported_member_organisms"),
+            pl.lit(None, dtype=pl.Boolean).alias("reported_members_contaminant"),
             pl.lit(None, dtype=pl.Boolean).alias("peptide_in_reported_protein"),
         )
     unique = joined.select("peptide", "fasta_match_site_count").drop_nulls("peptide").unique()

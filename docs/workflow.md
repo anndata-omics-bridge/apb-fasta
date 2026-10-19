@@ -55,16 +55,12 @@ complete = annotator.merge_annotations(verified.parsed)
 ```python
 from apb_fasta.api import FastaAnnotationParameters
 
-parameters = FastaAnnotationParameters(
-    protein_group_separator=";",
-    matcher_backend="auto",
-)
+parameters = FastaAnnotationParameters(matcher_backend="auto")
 annotator = FastaAnnotator(proteins, parameters=parameters)
 ```
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `protein_group_separator` | `";"` | Separator splitting a protein group into members; must not be empty |
 | `matcher_backend` | `"auto"` | Prozor Aho-Corasick backend: `auto`, `ahocorapy`, or `ahocorasick_rs` |
 
 ## Failures are explicit

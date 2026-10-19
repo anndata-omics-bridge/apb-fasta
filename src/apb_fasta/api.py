@@ -86,7 +86,6 @@ class FastaAnnotator:
             inputs,
             self._proteins,
             backend=self._parameters.matcher_backend,
-            protein_group_separator=self._parameters.protein_group_separator,
         )
         replacement, reports = apply_peptide_matches(
             parsed,
@@ -102,15 +101,10 @@ class FastaAnnotator:
         protein_input = protein_group_input(parsed)
         if protein_input is None:
             raise FastaAnnotationError("result contains no protein level to annotate")
-        protein_groups = match_protein_groups(
-            protein_input,
-            self._proteins,
-            separator=self._parameters.protein_group_separator,
-        )
+        protein_groups = match_protein_groups(protein_input, self._proteins)
         replacement, reports = apply_protein_group_match(
             parsed,
             protein_groups,
-            protein_group_separator=self._parameters.protein_group_separator,
             protein_metadata=protein_frame_metadata(self._proteins),
         )
         return FastaAnnotationResult(parsed=replacement, reports=reports)

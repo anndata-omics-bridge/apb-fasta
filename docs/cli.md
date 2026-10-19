@@ -34,7 +34,6 @@ Applies both operations in one in-memory pass and reports both coverage summarie
 | --- | --- | --- |
 | `--output` | required | all |
 | `--formats` | `uniprotkb refseq` | all |
-| `--protein-group-separator` | `;` | all |
 | `--backend` | `auto` | `verify-peptides`, `run` |
 
 `--formats` names the `protein_fasta` header formats to try, in priority order. `--backend` selects the Prozor Aho-Corasick implementation.

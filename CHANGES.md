@@ -1,5 +1,11 @@
 # Changes
 
+## 2026-10-20
+
+- `varm["fasta_validation"]` gains `reported_member_organisms` and `reported_members_contaminant`: the organisms of the reported protein-group members, and whether one is a contaminant. apb-proteobench reads them to decide species and contaminants as the vendor reports them.
+- A reported member also matches a FASTA record by entry name, by `ACC|NAME` (PEAKS) and by the accession field of a `db|ACC|NAME` id (`Cont_P00722`); protein-group annotation matches members the same way.
+- **Breaking:** `FastaAnnotationParameters.protein_group_separator` and `--protein-group-separator` are gone: apb2 writes every protein list `;`-separated. Protein-annotation provenance no longer records a separator.
+
 ## 2026-10-08
 
 - **Breaking:** FASTA metadata schema 4. Each checked level carries a record with `result`, `summary` and `details`; protein-group member coverage (matched, unmatched, ambiguous) is now persisted on the protein level. Operations merge into a level's record in any order.

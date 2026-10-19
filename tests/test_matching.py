@@ -36,7 +36,6 @@ def _match(
     leading: str | None = None,
     proteins: pl.DataFrame | None = None,
     backend: str = "auto",
-    separator: str = ";",
 ) -> PeptideLevelMatch:
     if "decoy" not in frame.columns:
         frame = frame.with_columns(pl.lit(value=False).alias("decoy"))
@@ -44,7 +43,6 @@ def _match(
         {"ion": PeptideLevelInput(frame, "peptide", assignment, "decoy", leading)},
         _proteins() if proteins is None else proteins,
         backend=backend,
-        protein_group_separator=separator,
     )["ion"]
 
 
@@ -67,6 +65,8 @@ def test_duplicate_records_sites_assignments_and_feature_order(backend: str) -> 
             "fasta_matches_contaminant": [False] * 8,
             "reported_member_count": [3, 1, 0, 0, 1, 1, 1, 0],
             "reported_members_in_fasta_count": [2, 1, 0, 0, 1, 1, 1, 0],
+            "reported_member_organisms": [""] * 8,
+            "reported_members_contaminant": [False] * 8,
             "peptide_in_reported_protein": [True, True, False, False, True, True, False, False],
             "fasta_il_only": [False] * 8,
         },
@@ -79,6 +79,8 @@ def test_duplicate_records_sites_assignments_and_feature_order(backend: str) -> 
             "fasta_matches_contaminant": pl.Boolean,
             "reported_member_count": pl.UInt64,
             "reported_members_in_fasta_count": pl.UInt64,
+            "reported_member_organisms": pl.String,
+            "reported_members_contaminant": pl.Boolean,
             "peptide_in_reported_protein": pl.Boolean,
             "fasta_il_only": pl.Boolean,
         },
@@ -107,6 +109,27 @@ def test_matched_organisms_and_contaminants_are_summarized_per_feature() -> None
         "",
     ]
     assert result.summary.get_column("fasta_matches_contaminant").to_list() == [True, False, False]
+
+
+def test_reported_proteins_resolve_as_vendors_write_them() -> None:
+    proteins = pl.DataFrame(
+        {
+            "id": ["sp|Cont_P1|X_BOVIN", "sp|P1|X_HUMAN", "sp|P2|Y_YEAST"],
+            "entry_name": ["X_BOVIN", "X_HUMAN", "Y_YEAST"],
+            "sequence": ["AAKK", "AAKR", "AAKR"],
+            "organism_mnemonic": ["BOVIN", "HUMAN", "YEAST"],
+            "is_contaminant": [True, False, False],
+        }
+    )
+    frame = pl.DataFrame(
+        {"peptide": ["AAK", "AKR", "AKR"], "assignment": ["Cont_P1", "P1|X_HUMAN;Y_YEAST", "Q9"]}
+    )
+
+    summary = _match(frame, proteins=proteins).summary
+
+    assert summary["reported_members_in_fasta_count"].to_list() == [1, 2, 0]
+    assert summary["reported_member_organisms"].to_list() == ["BOVIN", "HUMAN;YEAST", ""]
+    assert summary["reported_members_contaminant"].to_list() == [True, False, False]
 
 
 def test_absent_assignment_is_null_not_zero() -> None:
@@ -178,13 +201,13 @@ def test_decoys_count_apart_from_matched_and_unmatched_targets() -> None:
 
 def test_multilevel_coverage_counts_sequences_per_level() -> None:
     frame = pl.DataFrame(
-        {"peptide": ["AA", "aa"], "assignment": ["a|a", "p1"], "decoy": [False, False]}
+        {"peptide": ["AA", "aa"], "assignment": ["a;a", "p1"], "decoy": [False, False]}
     )
     levels = {
         "ion": PeptideLevelInput(frame, "peptide", "assignment", "decoy", None),
         "peptide": PeptideLevelInput(frame.head(1), "peptide", "assignment", "decoy", None),
     }
-    result = match_peptide_levels(levels, _proteins(), backend="auto", protein_group_separator="|")
+    result = match_peptide_levels(levels, _proteins(), backend="auto")
     assert result["ion"].coverage == PeptideCoverage(2, 1, 2, 0, 4, 0, 0)
     assert result["peptide"].coverage == PeptideCoverage(1, 1, 1, 0, 4, 0, 0)
     assert result["ion"].summary["reported_member_count"].to_list() == [2, 1]

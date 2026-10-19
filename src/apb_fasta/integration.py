@@ -167,7 +167,6 @@ def apply_protein_group_match(
     match: ProteinGroupMatch,
     /,
     *,
-    protein_group_separator: str,
     protein_metadata: dict[str, JsonValue],
 ) -> tuple[ParsedLevels, FastaAnnotationReports]:
     """Attach protein FASTA annotations to a deep replacement of the APB2 result."""
@@ -193,10 +192,7 @@ def apply_protein_group_match(
     _record_operation_metadata(
         result,
         PROTEIN_ANNOTATION_OPERATION,
-        {
-            "protein_group_separator": protein_group_separator,
-            **protein_metadata,
-        },
+        protein_metadata,
     )
     return result, FastaAnnotationReports(
         peptide_levels={},

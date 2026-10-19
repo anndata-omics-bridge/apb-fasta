@@ -26,7 +26,6 @@ def verify_peptides(
     output: Path,
     formats: tuple[str, ...] = ("uniprotkb", "refseq"),
     backend: Literal["auto", "ahocorapy", "ahocorasick_rs"] = "auto",
-    protein_group_separator: str = ";",
 ) -> int:
     """Verify stripped peptide sequences in SOURCE against FASTA_PATHS."""
     try:
@@ -34,10 +33,7 @@ def verify_peptides(
         annotator = FastaAnnotator.read(
             fasta_paths,
             formats,
-            FastaAnnotationParameters(
-                protein_group_separator=protein_group_separator,
-                matcher_backend=backend,
-            ),
+            FastaAnnotationParameters(matcher_backend=backend),
         )
         result = annotator.verify_peptides(read_parsed_levels(source))
         _write_result(result, output)
@@ -55,18 +51,11 @@ def merge_annotations(
     *fasta_paths: Path,
     output: Path,
     formats: tuple[str, ...] = ("uniprotkb", "refseq"),
-    protein_group_separator: str = ";",
 ) -> int:
     """Merge FASTA annotations into the reported protein groups in SOURCE."""
     try:
         _require_new_target(source, output)
-        annotator = FastaAnnotator.read(
-            fasta_paths,
-            formats,
-            FastaAnnotationParameters(
-                protein_group_separator=protein_group_separator,
-            ),
-        )
+        annotator = FastaAnnotator.read(fasta_paths, formats)
         result = annotator.merge_annotations(read_parsed_levels(source))
         _write_result(result, output)
         _report_protein_annotations(result)
@@ -84,7 +73,6 @@ def run(
     output: Path,
     formats: tuple[str, ...] = ("uniprotkb", "refseq"),
     backend: Literal["auto", "ahocorapy", "ahocorasick_rs"] = "auto",
-    protein_group_separator: str = ";",
 ) -> int:
     """Verify peptides and merge protein annotations in one in-memory run."""
     try:
@@ -92,10 +80,7 @@ def run(
         annotator = FastaAnnotator.read(
             fasta_paths,
             formats,
-            FastaAnnotationParameters(
-                protein_group_separator=protein_group_separator,
-                matcher_backend=backend,
-            ),
+            FastaAnnotationParameters(matcher_backend=backend),
         )
         result = annotator.annotate(read_parsed_levels(source))
         _write_result(result, output)

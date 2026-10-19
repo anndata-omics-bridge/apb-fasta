@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 
 import polars as pl
 
+from apb_fasta.calculation.matching import member_records
 from apb_fasta.calculation.results import ProteinGroupCoverage, ProteinGroupMatch
 
 _OPTIONAL_FASTA_COLUMNS = (
@@ -40,12 +40,12 @@ def match_protein_groups(
     source: ProteinGroupInput,
     proteins: pl.DataFrame,
     /,
-    *,
-    separator: str,
 ) -> ProteinGroupMatch:
     """Expand every reported member and retain every matching FASTA record."""
     protein_rows = proteins.to_dicts()
-    aliases = _protein_aliases(protein_rows)
+    aliases = {
+        member: tuple(sorted(records)) for member, records in member_records(proteins).iter_rows()
+    }
     members_rows: list[dict[str, object]] = []
     summaries: list[dict[str, object]] = []
     relation_rows: list[dict[str, object]] = []
@@ -55,7 +55,7 @@ def match_protein_groups(
     member_count = 0
     for group_index, group in enumerate(source.frame.to_dicts()):
         raw_group = group.get(source.accession_column)
-        members = _members(raw_group, separator)
+        members = _members(raw_group)
         group_matched = 0
         group_unmatched = 0
         group_ambiguous = 0
@@ -207,23 +207,11 @@ def _summary_schema() -> dict[str, type[pl.DataType]]:
     }
 
 
-def _protein_aliases(rows: list[dict[str, object]]) -> dict[str, tuple[int, ...]]:
-    collected: dict[str, list[int]] = defaultdict(list)
-    for index, row in enumerate(rows):
-        aliases = {
-            value
-            for name in ("id", "accession")
-            if isinstance((value := row.get(name)), str) and value
-        }
-        for alias in aliases:
-            collected[alias].append(index)
-    return {name: tuple(indices) for name, indices in collected.items()}
-
-
-def _members(value: object, separator: str) -> tuple[str, ...]:
+def _members(value: object) -> tuple[str, ...]:
+    """The members of a protein list, which apb2 writes ``;``-separated."""
     if not isinstance(value, str):
         return ()
-    return tuple(token.strip() for token in value.split(separator) if token.strip())
+    return tuple(token.strip() for token in value.split(";") if token.strip())
 
 
 def _append_text(values: list[str], value: object) -> None:
