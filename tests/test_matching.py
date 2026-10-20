@@ -69,6 +69,8 @@ def test_duplicate_records_sites_assignments_and_feature_order(backend: str) -> 
             "reported_members_contaminant": [False] * 8,
             "peptide_in_reported_protein": [True, True, False, False, True, True, False, False],
             "fasta_il_only": [False] * 8,
+            "is_protein_group_specific": [None] * 8,
+            "is_proteotypic": [False, False, None, None, False, True, None, False],
         },
         schema={
             "peptide_in_fasta": pl.Boolean,
@@ -83,6 +85,8 @@ def test_duplicate_records_sites_assignments_and_feature_order(backend: str) -> 
             "reported_members_contaminant": pl.Boolean,
             "peptide_in_reported_protein": pl.Boolean,
             "fasta_il_only": pl.Boolean,
+            "is_protein_group_specific": pl.Boolean,
+            "is_proteotypic": pl.Boolean,
         },
     )
     assert result.summary.columns == [*expected.columns, *_LEADING]
@@ -130,6 +134,31 @@ def test_reported_proteins_resolve_as_vendors_write_them() -> None:
     assert summary["reported_members_in_fasta_count"].to_list() == [1, 2, 0]
     assert summary["reported_member_organisms"].to_list() == ["BOVIN", "HUMAN;YEAST", ""]
     assert summary["reported_members_contaminant"].to_list() == [True, False, False]
+
+
+def test_group_specific_needs_the_group_and_proteotypic_one_protein() -> None:
+    proteins = pl.DataFrame(
+        {
+            "id": ["sp|P1|X_HUMAN", "sp|P2|Y_HUMAN", "sp|P3|Z_HUMAN"],
+            "sequence": ["AAKR", "AAKK", "MMKR"],
+        }
+    )
+    frame = pl.DataFrame(
+        {
+            "peptide": ["AAK", "AAK", "MMK", "WWW", "AAK", "AAK"],
+            "group": ["P1;P2", "P1", "P1;P2", "P1", "Q9", "P1|X_HUMAN; P2|Y_HUMAN"],
+        }
+    )
+
+    summary = _match(frame, assignment=None, leading="group", proteins=proteins).summary
+
+    assert summary["is_protein_group_specific"].to_list() == [True, False, False, None, None, True]
+    assert summary["is_proteotypic"].to_list() == [False, False, True, None, False, False]
+
+
+def test_group_specific_is_null_without_a_protein_assignment() -> None:
+    summary = _match(pl.DataFrame({"peptide": ["AA"]}), assignment=None).summary
+    assert summary["is_protein_group_specific"].to_list() == [None]
 
 
 def test_absent_assignment_is_null_not_zero() -> None:

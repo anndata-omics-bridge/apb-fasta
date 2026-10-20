@@ -11,7 +11,7 @@ Writes a feature-aligned `varm["fasta_validation"]` table on every peptide-deriv
 | `peptide_in_fasta` | Boolean | The stripped sequence occurs in at least one protein |
 | `fasta_match_site_count` | UInt64 | Total match sites across the database |
 | `fasta_matching_protein_count` | UInt64 | Distinct proteins containing the sequence |
-| `fasta_matching_protein_ids` | String | Separator-joined matching accessions |
+| `fasta_matching_protein_ids` | String | `;`-joined FASTA ids of the matching proteins |
 | `fasta_matching_organisms` | String | Sorted, `;`-joined organism mnemonics of the matching proteins, e.g. `HUMAN;YEAST` |
 | `fasta_matches_contaminant` | Boolean | A matching protein is a contaminant (`is_contaminant`) |
 | `reported_member_count` | UInt64 | Protein-group members the result reported |
@@ -20,6 +20,7 @@ Writes a feature-aligned `varm["fasta_validation"]` table on every peptide-deriv
 | `reported_members_contaminant` | Boolean | A reported member found is a contaminant |
 | `peptide_in_reported_protein` | Boolean | The sequence occurs in a reported member |
 | `fasta_il_only` | Boolean | `peptide_in_fasta` or `peptide_in_reported_protein` holds only for another I/L spelling |
+| `is_proteotypic` | Boolean | The peptide matches exactly one protein of the FASTA |
 | `reported_leading_id` | String | FASTA `id` of the leading protein, e.g. `sp\|P02768\|ALBU_HUMAN` |
 | `reported_leading_accession` | String | Its accession |
 | `reported_leading_description` | String | Its header text after the id |
@@ -27,7 +28,7 @@ Writes a feature-aligned `varm["fasta_validation"]` table on every peptide-deriv
 | `reported_leading_protein_length` | UInt64 | Its sequence length |
 | `reported_leading_tryptic_peptides` | UInt64 | Its tryptic peptides of 7 to 29 residues, cleaved after K or R unless P follows |
 
-The four `reported_member*` columns and `peptide_in_reported_protein` are null when the level reports no protein group, which distinguishes "not reported" from "reported and unmatched".
+The four `reported_member*` columns and `peptide_in_reported_protein` are null when the level reports no protein group, which distinguishes "not reported" from "reported and unmatched". `is_protein_group_specific` is null when the peptide matches no protein, the level declares no `protein_assignment`, or no member of the feature's group is in the FASTA. It tests the `protein_assignment` group, the vendor's inferred group, not the `fasta_accessions` list the `reported_*` columns read, which can name every protein a peptide maps to. `is_proteotypic` is null only when the peptide matches no protein. The two differ: a peptide shared by two proteins of one group is group specific but not proteotypic.
 
 The leading protein is the first member of the level's `protein_assignment` column, found as any reported member is; the first such record in the FASTA wins. Its six `reported_leading_*` columns carry what prolfquapp reads from a FASTA for a protein, counted as prolfquapp's `get_annot_from_fasta` counts; they are null when the level declares no `protein_assignment` or the FASTA lacks that member.
 

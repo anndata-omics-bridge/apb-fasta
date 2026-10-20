@@ -75,6 +75,9 @@ def match_peptide_levels(
         is_contaminant=pl.col("is_contaminant") if "is_contaminant" in columns else pl.lit(False),
     ).with_row_index("record")
     assignments = _reported_assignments(prepared, members, indexed)
+    groups = (
+        _list_members(prepared, "group", members).group_by("group").agg(_records("group_records"))
+    )
     leading = _leading_proteins(prepared, proteins, members)
     spellings = _il_spellings(_fallback_peptides(prepared, peptides, exact, assignments))
     il = (
@@ -115,7 +118,7 @@ def match_peptide_levels(
     )
     return {
         name: _level_match(
-            frame, matches, assignments, leading, levels[name].accession_column is not None
+            frame, matches, assignments, groups, leading, levels[name].accession_column is not None
         )
         for name, frame in prepared.items()
     }
@@ -204,10 +207,12 @@ def _prepare_features(level: PeptideLevelInput) -> pl.DataFrame:
     return level.frame.with_columns(
         sequence.alias("peptide"),
         _text_column(level.frame, level.accession_column).alias("assignment"),
+        _text_column(level.frame, level.protein_assignment_column).alias("group"),
         leading.alias("leading_member"),
     ).select(
         pl.when(pl.col("peptide") != "").then(pl.col("peptide")).alias("peptide"),
         "assignment",
+        "group",
         pl.when(pl.col("leading_member") != "")
         .then(pl.col("leading_member"))
         .alias("leading_member"),
@@ -282,23 +287,34 @@ def _tryptic_peptides(sequence: str) -> int:
     return sum(end - start in _TRYPTIC_LENGTHS for start, end in pairwise([0, *ends]))
 
 
+def _list_members(
+    prepared: Mapping[str, pl.DataFrame], column: str, aliases: pl.DataFrame
+) -> pl.DataFrame:
+    """One row per member of each distinct protein list in ``column``, with its records."""
+    return (
+        pl.concat([frame.select(column) for frame in prepared.values()])
+        .drop_nulls()
+        .unique()
+        .with_columns(
+            pl.col(column).str.split(";").list.eval(pl.element().str.strip_chars()).alias("member")
+        )
+        .explode("member", empty_as_null=True)
+        .filter(pl.col("member") != "")
+        .join(aliases, on="member", how="left")
+    )
+
+
+def _records(name: str) -> pl.Expr:
+    """The distinct FASTA records the members of one protein list name."""
+    return pl.col("record").explode(empty_as_null=True).drop_nulls().unique().alias(name)
+
+
 def _reported_assignments(
     prepared: Mapping[str, pl.DataFrame], aliases: pl.DataFrame, indexed: pl.DataFrame
 ) -> pl.DataFrame:
     """Each reported protein list's members, those the FASTA holds, and their organisms."""
     assignments = (
-        pl.concat([frame.select("assignment") for frame in prepared.values()])
-        .drop_nulls()
-        .unique()
-        .with_columns(
-            pl.col("assignment")
-            .str.split(";")
-            .list.eval(pl.element().str.strip_chars())
-            .alias("member")
-        )
-        .explode("member", empty_as_null=True)
-        .filter(pl.col("member") != "")
-        .join(aliases, on="member", how="left")
+        _list_members(prepared, "assignment", aliases)
         .group_by("assignment")
         .agg(
             pl.len().cast(pl.UInt64).alias("reported_member_count"),
@@ -307,11 +323,7 @@ def _reported_assignments(
             .sum()
             .cast(pl.UInt64)
             .alias("reported_members_in_fasta_count"),
-            pl.col("record")
-            .explode(empty_as_null=True)
-            .drop_nulls()
-            .unique()
-            .alias("reported_records"),
+            _records("reported_records"),
         )
     )
     found = (
@@ -324,16 +336,34 @@ def _reported_assignments(
     return assignments.join(found, on="assignment", how="left")
 
 
+def _proteotypic() -> pl.Expr:
+    """Whether the peptide matches exactly one FASTA protein; null without a match."""
+    matched = pl.col("matched_records").is_not_null()
+    return pl.when(matched).then(pl.col("fasta_matching_protein_count") == 1)
+
+
+def _group_specific() -> pl.Expr:
+    """Whether every FASTA protein the peptide matches is a member of its own protein group.
+
+    Null without a FASTA match, or when no member of the feature's group is in the FASTA.
+    """
+    group = pl.col("group_records")
+    known = pl.col("matched_records").is_not_null() & (group.list.len() > 0)
+    return pl.when(known).then(pl.col("matched_records").list.set_difference(group).list.len() == 0)
+
+
 def _level_match(
     features: pl.DataFrame,
     matches: pl.DataFrame,
     assignments: pl.DataFrame,
+    groups: pl.DataFrame,
     leading: pl.DataFrame,
     has_assignment: bool,
 ) -> PeptideLevelMatch:
     joined = (
         features.join(matches, on="peptide", how="left", maintain_order="left")
         .join(assignments, on="assignment", how="left", maintain_order="left")
+        .join(groups, on="group", how="left", maintain_order="left")
         .join(leading, on="leading_member", how="left", maintain_order="left")
     )
     reported = pl.col("reported_records").fill_null([])
@@ -353,6 +383,8 @@ def _level_match(
         pl.col("reported_members_contaminant").fill_null(False),
         ((in_matched > 0) | (in_il > 0)).alias("peptide_in_reported_protein"),
         (il_only_match | ((in_il > 0) & (in_matched == 0))).alias("fasta_il_only"),
+        _group_specific().alias("is_protein_group_specific"),
+        _proteotypic().alias("is_proteotypic"),
         *leading.columns[1:],
     )
     if not has_assignment:
