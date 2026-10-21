@@ -20,6 +20,7 @@ Writes a feature-aligned `varm["fasta_validation"]` table on every peptide-deriv
 | `reported_members_contaminant` | Boolean | A reported member found is a contaminant |
 | `peptide_in_reported_protein` | Boolean | The sequence occurs in a reported member |
 | `fasta_il_only` | Boolean | `peptide_in_fasta` or `peptide_in_reported_protein` holds only for another I/L spelling |
+| `is_protein_group_specific` | Boolean | Every protein the peptide matches is a member of its own protein group (`protein_assignment`) |
 | `is_proteotypic` | Boolean | The peptide matches exactly one protein of the FASTA |
 | `reported_leading_id` | String | FASTA `id` of the leading protein, e.g. `sp\|P02768\|ALBU_HUMAN` |
 | `reported_leading_accession` | String | Its accession |

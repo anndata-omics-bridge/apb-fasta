@@ -2,6 +2,7 @@
 
 ## 2026-10-20
 
+- `varm["fasta_validation"]` gains `is_protein_group_specific` and `is_proteotypic`. `is_protein_group_specific`: every protein the peptide matches is a member of its own protein group, the feature's `protein_assignment` members resolved as reported members are; null without a match, a `protein_assignment`, or a group member in the FASTA. `is_proteotypic`: the peptide matches exactly one FASTA protein; null without a match.
 - `varm["fasta_validation"]` gains `reported_member_organisms` and `reported_members_contaminant`: the organisms of the reported protein-group members, and whether one is a contaminant. apb-proteobench reads them to decide species and contaminants as the vendor reports them.
 - A reported member also matches a FASTA record by entry name, by `ACC|NAME` (PEAKS) and by the accession field of a `db|ACC|NAME` id (`Cont_P00722`); protein-group annotation matches members the same way.
 - **Breaking:** `FastaAnnotationParameters.protein_group_separator` and `--protein-group-separator` are gone: apb2 writes every protein list `;`-separated. Protein-annotation provenance no longer records a separator.
