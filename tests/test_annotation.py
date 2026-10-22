@@ -250,6 +250,9 @@ def test_annotated_result_round_trips_through_multilevel_formats(
     assert members.frame.height == 5
     relation = restored.feature_relations["fasta_protein_group_membership"]
     assert relation.coordinates["column"].to_list() == [0, 0, 0, 1, 2]
+    assert relation.coordinates.select("source", "target").unique().rows() == [
+        ("fasta_protein_group_members", "protein")
+    ]
 
 
 def test_peptide_only_annotation_round_trips_through_h5ad(tmp_path: Path) -> None:

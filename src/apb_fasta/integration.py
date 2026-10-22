@@ -184,9 +184,13 @@ def apply_protein_group_match(
         {"producer": "apb-fasta", "schema_version": "1"},
     ).with_feature_relation(
         MEMBER_RELATION_NAME,
-        MEMBER_TABLE_NAME,
-        "protein",
-        match.relation.clone(),
+        match.relation.select(
+            source=pl.lit(MEMBER_TABLE_NAME),
+            row=pl.col("row"),
+            target=pl.lit("protein"),
+            column=pl.col("column"),
+            value=pl.col("value"),
+        ),
         {"producer": "apb-fasta", "semantic": "member_of"},
     )
     _record_operation_metadata(
