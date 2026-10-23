@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict
+from pathlib import PurePath
 from typing import cast
 
 import polars as pl
@@ -20,7 +21,7 @@ from apb_fasta.calculation.results import (
 )
 from apb_fasta.errors import FastaAnnotationError
 
-FASTA_SCHEMA_VERSION = "4"
+FASTA_SCHEMA_VERSION = "5"
 FASTA_VALIDATION_NAME = "fasta_validation"
 FASTA_SUMMARY_NAME = "fasta"
 MEMBER_TABLE_NAME = "fasta_protein_group_members"
@@ -252,7 +253,7 @@ def protein_frame_metadata(proteins: pl.DataFrame, /) -> dict[str, JsonValue]:
         "sources": {
             str(_json_scalar(source["fasta_source_ordinal"])): {
                 "ordinal": _json_scalar(source["fasta_source_ordinal"]),
-                "path": _json_scalar(source["fasta_source_path"]),
+                "file_name": PurePath(str(source["fasta_source_path"])).name,
                 "checksum": _json_scalar(source["fasta_source_checksum"]),
             }
             for source in sources
