@@ -40,10 +40,10 @@ def _match(
     if "decoy" not in frame.columns:
         frame = frame.with_columns(pl.lit(value=False).alias("decoy"))
     return match_peptide_levels(
-        {"ion": PeptideLevelInput(frame, "peptide", assignment, "decoy", leading)},
+        {"peptidoform_ion": PeptideLevelInput(frame, "peptide", assignment, "decoy", leading)},
         _proteins() if proteins is None else proteins,
         backend=backend,
-    )["ion"]
+    )["peptidoform_ion"]
 
 
 @pytest.mark.parametrize("backend", ["ahocorapy", "ahocorasick_rs"])
@@ -233,13 +233,13 @@ def test_multilevel_coverage_counts_sequences_per_level() -> None:
         {"peptide": ["AA", "aa"], "assignment": ["a;a", "p1"], "decoy": [False, False]}
     )
     levels = {
-        "ion": PeptideLevelInput(frame, "peptide", "assignment", "decoy", None),
+        "peptidoform_ion": PeptideLevelInput(frame, "peptide", "assignment", "decoy", None),
         "peptide": PeptideLevelInput(frame.head(1), "peptide", "assignment", "decoy", None),
     }
     result = match_peptide_levels(levels, _proteins(), backend="auto")
-    assert result["ion"].coverage == PeptideCoverage(2, 1, 2, 0, 4, 0, 0)
+    assert result["peptidoform_ion"].coverage == PeptideCoverage(2, 1, 2, 0, 4, 0, 0)
     assert result["peptide"].coverage == PeptideCoverage(1, 1, 1, 0, 4, 0, 0)
-    assert result["ion"].summary["reported_member_count"].to_list() == [2, 1]
+    assert result["peptidoform_ion"].summary["reported_member_count"].to_list() == [2, 1]
 
 
 @pytest.mark.parametrize("column", ["id", "sequence"])
