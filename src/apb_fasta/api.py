@@ -126,7 +126,7 @@ def add_peptide_properties(parsed: ParsedLevels) -> ParsedLevels:
     """Attach sequence-derived properties to every peptide-derived level.
 
     Writes a feature-aligned ``varm["peptide_properties"]`` computed by
-    ``protein_fasta.peptide_frame.peptide_property_frame`` from each level's ``ProForma_peptide``.
+    ``protein_fasta.api.peptide_property_frame`` from each level's ``ProForma_peptide``.
     No protein database is needed. A feature without a sequence, or with a residue outside the 20
     standard amino acids, has null properties.
 

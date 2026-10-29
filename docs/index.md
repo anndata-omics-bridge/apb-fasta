@@ -4,16 +4,17 @@ FASTA verification and protein annotation for [APB2](https://anndata-omics-bridg
 
 `apb-fasta` takes one APB2 result and FASTA files, or their parsed protein database, and returns a replacement result. It never opens result files itself, and it never receives raw AnnData or MuData objects — [`protein_fasta`](https://anndata-omics-bridge.github.io/protein-fasta/) owns FASTA reading and header interpretation, [Prozor](https://anndata-omics-bridge.github.io/prozor/) owns peptide matching, and APB2 owns result persistence.
 
-## Two independent operations
+## Three independent operations
 
 | Operation | What it does |
 | --- | --- |
 | `verify_peptides` | Confirms every modification-stripped peptide sequence occurs in the supplied FASTA database |
 | `merge_annotations` | Merges FASTA annotations for every reported protein-group member, without collapsing the group to its leading accession |
+| `add_peptide_properties` | Adds sequence-derived peptide properties to every peptide-derived level; needs no FASTA database and has no CLI command |
 
-Each operation is independently callable and independently persistable. `FastaAnnotator.annotate()` applies both in memory without an intermediate file; the CLI retains the concise `run` command.
+Each operation is independently callable and independently persistable. `FastaAnnotator.annotate()` applies the first two in memory without an intermediate file; the CLI retains the concise `run` command.
 
-Protein inference with Prozor is the planned third operation. It will remain explicit and opt-in.
+Protein inference with Prozor is the planned fourth operation. It will remain explicit and opt-in.
 
 ## Install
 

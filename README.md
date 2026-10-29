@@ -7,12 +7,13 @@ FASTA verification and protein annotation for APB2 results.
 
 **[Online documentation](https://anndata-omics-bridge.github.io/apb-fasta/)** or its [source index](https://github.com/anndata-omics-bridge/apb-fasta/blob/main/docs/index.md).
 
-The first release exposes two independent operations:
+The first release exposes three independent operations:
 
 - verify that APB2's modification-stripped peptide sequences occur in the supplied FASTA database;
-- merge FASTA annotations for every reported protein-group member without collapsing the group to its leading accession.
+- merge FASTA annotations for every reported protein-group member without collapsing the group to its leading accession;
+- add sequence-derived peptide properties to every peptide-derived level with `add_peptide_properties`, which needs no FASTA database and is available from Python only.
 
-Protein inference with Prozor is the planned third operation. It will remain explicit and opt-in.
+Protein inference with Prozor is the planned fourth operation. It will remain explicit and opt-in.
 
 ## Installation
 

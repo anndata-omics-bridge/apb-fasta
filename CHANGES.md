@@ -4,10 +4,6 @@
 
 - **Breaking:** FASTA metadata schema 5 names each FASTA source by `file_name`, its base name, where schema 4 stored the `path` as given.
 
-## 2026-10-23
-
-- **Breaking:** FASTA metadata schema 5 names each FASTA source by `file_name`, its base name, where schema 4 stored the `path` as given.
-
 ## 2026-10-20
 
 - `varm["fasta_validation"]` gains `is_protein_group_specific` and `is_proteotypic`. `is_protein_group_specific`: every protein the peptide matches is a member of its own protein group, the feature's `protein_assignment` members resolved as reported members are; null without a match, a `protein_assignment`, or a group member in the FASTA. `is_proteotypic`: the peptide matches exactly one FASTA protein; null without a match.
@@ -21,6 +17,10 @@
 - `varm["fasta_validation"]` gains six `reported_leading_*` columns describing each feature's leading protein, the first member of its `protein_assignment`: FASTA id, accession, description, gene name, sequence length and tryptic peptide count as prolfquapp computes them. apb-export's prolfqua target reads them.
 - **Breaking:** peptide verification always accepts another I/L spelling, and `FastaAnnotationParameters.il_equivalent` and `--il-equivalent` are gone. Peptides match the protein sequences as read; only a peptide with no exact match, or none in a reported member the database contains, tries its other I/L spellings. Exactly matched peptides therefore keep exactly their proteins, which the former symmetric rewrite widened. `varm["fasta_validation"]` gains `fasta_il_only`, `PeptideCoverage` gains `il_only_matched_feature_count`, the CLI reports `il_only=`, and FASTA metadata moves to schema 3 without `il_equivalent` in its provenance.
 - Peptide coverage separates decoys: `PeptideCoverage` gains `decoy_feature_count`, the rows apb2 marks `apb_Decoy`, and `matched_feature_count` and `unmatched_feature_count` now count targets only, so a decoy no longer reports as an unmatched peptide. Peptide verification requires `apb_Decoy` on every level it checks; the CLI reports `decoys=`.
+
+## 2026-10-06
+
+- CI and the documentation build check out APB2, protein-fasta and Prozor at their current `main` instead of pinned commits.
 
 ## 2026-10-05
 

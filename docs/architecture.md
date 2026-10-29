@@ -9,7 +9,7 @@
 | FASTA reading, header interpretation, classification | `protein_fasta` |
 | Peptide-to-protein matching (Aho-Corasick) | `prozor` |
 | Result reading, writing, level and axis structure | `apb2` |
-| Translating between the two, and the operation lifecycle | `apb_fasta` |
+| Translating between the three, and the operation lifecycle | `apb_fasta` |
 
 ## Modules
 
@@ -27,7 +27,7 @@ graph TD
     config --> calculation
 ```
 
-- `api.py` — the public protein-bound lifecycle: `FastaAnnotator`, which `read()` builds from FASTA files through protein_fasta, and `FastaAnnotationResult`
+- `api.py` — the public protein-bound lifecycle: `FastaAnnotator`, which `read()` builds from FASTA files through protein_fasta, and `FastaAnnotationResult`; plus `add_peptide_properties`, which needs no protein database
 - `integration.py` — the **only** module that reads or writes APB2 result values; extracts inputs, validates output names, and builds the deep replacement
 - `calculation/` — pure Polars in, pure Polars out; imports no APB2 and no storage framework
 - `configuration.py` / `errors.py` — user-selected behavior and the single expected-failure type
