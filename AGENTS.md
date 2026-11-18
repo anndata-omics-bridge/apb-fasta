@@ -33,3 +33,7 @@ The closest `AGENTS.md` wins. Explicit user instructions override this file.
 - Use Google-style docstrings for public APIs.
 - Keep `docs/` current with behavioral changes; `make check` builds it with `--strict`.
 - Preserve unrelated worktree changes and add focused tests with behavioral changes.
+
+## Output style
+
+Every reply must follow the output style that `outputStyle` selects in [settings.json](/Users/wolski/.claude/settings.json), currently [Answer-first](/Users/wolski/.claude/output-styles/answer-first.md). Read that file if your harness does not load it. No exceptions for long, investigative or follow-up replies.
