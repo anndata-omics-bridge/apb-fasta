@@ -26,7 +26,7 @@ write_parsed_levels(verified.parsed, Path("verified.h5mu"))
 
 Verification covers every peptide-derived level that carries APB2's canonical `ProForma_peptide` column. A result with no such level is an error, not a silent no-op.
 
-## Merge protein annotations only
+## Merge protein-group annotations only
 
 ```python
 annotated = annotator.merge_annotations(parsed)
@@ -34,7 +34,7 @@ print(annotated.reports.protein_groups)
 write_parsed_levels(annotated.parsed, Path("annotated.h5mu"))
 ```
 
-Annotation reads the protein axis and the FASTA-accession column role APB2 persisted for it. A result with no protein level is an error.
+Annotation covers every level whose features name FASTA accessions through the `fasta_accessions` column role APB2 persisted: the protein level and peptide-derived levels alike, such as DIA-NN's `peptidoform_ion` level with its `Protein.Ids`. A result without a protein level is annotated on its peptide levels; a result with no level declaring the role is an error. `reports.protein_groups` holds one member coverage per annotated level.
 
 ## Apply both
 

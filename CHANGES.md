@@ -1,5 +1,9 @@
 # Changes
 
+## 2026-11-20, release 0.1.2
+
+- **Breaking:** `merge_annotations` and `annotate` annotate every level whose features name FASTA accessions through the `fasta_accessions` role, peptide-derived levels too, and a result without a protein level ([apb-fasta#1](https://github.com/anndata-omics-bridge/apb-fasta/issues/1)). A level other than `protein` writes its member table and relation as `fasta_protein_group_members_<level>` and `fasta_protein_group_membership_<level>`. `FastaAnnotationReports.protein_groups` is a mapping from level to coverage, as `peptide_levels` is; it was the protein level's coverage or `None`
+
 ## 2026-10-23
 
 - **Breaking:** FASTA metadata schema 5 names each FASTA source by `file_name`, its base name, where schema 4 stored the `path` as given.

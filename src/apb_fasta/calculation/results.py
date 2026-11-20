@@ -60,4 +60,5 @@ class FastaAnnotationReports:
     """Persistable aggregate evidence from one annotation application."""
 
     peptide_levels: Mapping[str, PeptideCoverage]
-    protein_groups: ProteinGroupCoverage | None
+    protein_groups: Mapping[str, ProteinGroupCoverage]
+    """Member coverage of each level annotated by its ``fasta_accessions`` column."""

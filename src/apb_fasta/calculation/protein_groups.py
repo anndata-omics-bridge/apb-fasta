@@ -29,8 +29,9 @@ _OPTIONAL_FASTA_COLUMNS = (
 
 @dataclass(frozen=True, slots=True)
 class ProteinGroupInput:
-    """The protein feature axis and its declared FASTA accession column."""
+    """One level's feature axis and its declared FASTA accession column."""
 
+    level: str
     frame: pl.DataFrame
     key_columns: tuple[str, ...]
     accession_column: str
@@ -154,7 +155,7 @@ def _member_row(
 ) -> dict[str, object]:
     sequence = None if protein is None else protein.get("sequence")
     row: dict[str, object] = {
-        "source_level": "protein",
+        "source_level": source.level,
         **{name: group[name] for name in source.key_columns},
         "member_ordinal": member_ordinal,
         "match_ordinal": match_ordinal,

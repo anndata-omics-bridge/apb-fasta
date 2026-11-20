@@ -24,16 +24,17 @@ from apb_fasta.errors import FastaAnnotationError
 from apb_fasta.integration import (
     apply_peptide_matches,
     apply_peptide_properties,
-    apply_protein_group_match,
+    apply_protein_group_matches,
     peptide_inputs,
     protein_frame_metadata,
-    protein_group_input,
+    protein_group_inputs,
     validate_protein_frame,
 )
 
 _NO_PEPTIDE_LEVEL = (
     "result contains no peptide-derived level with canonical ProForma_peptide values"
 )
+_NO_ACCESSION_LEVEL = "result contains no level declaring column_roles.fasta_accessions"
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,20 +98,31 @@ class FastaAnnotator:
         return FastaAnnotationResult(parsed=replacement, reports=reports)
 
     def merge_annotations(self, parsed: ParsedLevels) -> FastaAnnotationResult:
-        """Merge FASTA annotations for every reported protein-group member."""
-        protein_input = protein_group_input(parsed)
-        if protein_input is None:
-            raise FastaAnnotationError("result contains no protein level to annotate")
-        protein_groups = match_protein_groups(protein_input, self._proteins)
-        replacement, reports = apply_protein_group_match(
+        """Merge FASTA annotations for every protein-group member each level reports.
+
+        Every level whose features name FASTA accessions through apb2's ``fasta_accessions``
+        role is annotated: the protein level and peptide-derived levels alike, so a result
+        without a protein level is annotated too.
+
+        Raises:
+            FastaAnnotationError: If no level declares the role, or a level already contains
+                the output, or the result already records the operation.
+        """
+        inputs = protein_group_inputs(parsed)
+        if not inputs:
+            raise FastaAnnotationError(_NO_ACCESSION_LEVEL)
+        matches = {
+            name: match_protein_groups(source, self._proteins) for name, source in inputs.items()
+        }
+        replacement, reports = apply_protein_group_matches(
             parsed,
-            protein_groups,
+            matches,
             protein_metadata=protein_frame_metadata(self._proteins),
         )
         return FastaAnnotationResult(parsed=replacement, reports=reports)
 
     def annotate(self, parsed: ParsedLevels) -> FastaAnnotationResult:
-        """Verify peptides and then merge protein annotations in memory."""
+        """Verify peptides and then merge protein-group annotations in memory."""
         verified = self.verify_peptides(parsed)
         annotated = self.merge_annotations(verified.parsed)
         return FastaAnnotationResult(

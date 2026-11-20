@@ -102,10 +102,10 @@ def test_annotate_verifies_peptides_and_merges_annotations_without_mutating_inpu
         "Protein two",
         None,
     ]
-    assert result.reports.protein_groups is not None
-    assert result.reports.protein_groups.member_count == 4
-    assert result.reports.protein_groups.matched_member_count == 2
-    assert result.reports.protein_groups.ambiguous_member_count == 1
+    assert set(result.reports.protein_groups) == {"peptide", "protein"}
+    assert result.reports.protein_groups["protein"].member_count == 4
+    assert result.reports.protein_groups["protein"].matched_member_count == 2
+    assert result.reports.protein_groups["protein"].ambiguous_member_count == 1
     metadata = result.parsed.metadata["fasta"]
     assert isinstance(metadata, dict)
     assert set(metadata) == {"schema_version", "provenance"}
@@ -115,8 +115,13 @@ def test_annotate_verifies_peptides_and_merges_annotations_without_mutating_inpu
     coverage = result.reports.peptide_levels["peptide"]
     peptide = result.parsed.levels["peptide"].metadata["fasta"]
     assert isinstance(peptide, dict)
-    assert peptide["details"] == [{"slot": "varm", "name": "fasta_validation"}]
-    assert _summary(peptide) == [
+    assert peptide["details"] == [
+        {"slot": "varm", "name": "fasta_validation"},
+        {"slot": "varm", "name": "fasta"},
+        {"slot": "annotation_tables", "name": "fasta_protein_group_members_peptide"},
+        {"slot": "feature_relations", "name": "fasta_protein_group_membership_peptide"},
+    ]
+    assert _summary(peptide)[:3] == [
         ("matched_features", coverage.matched_feature_count, "ok"),
         (
             "unmatched_features",
@@ -125,7 +130,7 @@ def test_annotate_verifies_peptides_and_merges_annotations_without_mutating_inpu
         ),
         ("decoy_features", coverage.decoy_feature_count, "ok"),
     ]
-    groups = result.reports.protein_groups
+    groups = result.reports.protein_groups["protein"]
     protein = result.parsed.levels["protein"].metadata["fasta"]
     assert isinstance(protein, dict)
     assert protein["result"] == {"protein_annotation": asdict(groups)}
@@ -155,11 +160,11 @@ def test_operations_run_independently() -> None:
     assert "fasta_validation" in verified.parsed.levels["peptide"].varm
     assert verified.parsed.levels["protein"].varm == {}
     assert verified.parsed.annotation_tables == {}
-    assert verified.reports.protein_groups is None
-    assert annotated.parsed.levels["peptide"].varm == {}
+    assert verified.reports.protein_groups == {}
+    assert set(annotated.parsed.levels["peptide"].varm) == {"fasta"}
     assert "fasta" in annotated.parsed.levels["protein"].varm
     assert annotated.reports.peptide_levels == {}
-    assert annotated.reports.protein_groups is not None
+    assert set(annotated.reports.protein_groups) == {"peptide", "protein"}
 
 
 def test_operations_compose_in_memory() -> None:
@@ -253,6 +258,44 @@ def test_annotated_result_round_trips_through_multilevel_formats(
     assert relation.coordinates.select("source", "target").unique().rows() == [
         ("fasta_protein_group_members", "protein")
     ]
+
+
+def test_a_result_without_protein_level_is_annotated_on_its_peptide_level() -> None:
+    """apb-fasta#1: a peptide-only result takes the group-member annotations too."""
+    parsed = _parsed()
+    peptide_only = ParsedLevels(levels={"peptide": parsed.levels["peptide"]}, uns={})
+
+    result = FastaAnnotator(_proteins()).annotate(peptide_only)
+
+    summary = result.parsed.levels["peptide"].varm["fasta"]
+    assert summary["any_member_in_fasta"].to_list() == [True, True, False]
+    assert summary["fasta_gene_names"].to_list() == ["G1;G2", "G2", ""]
+    members = result.parsed.annotation_tables["fasta_protein_group_members_peptide"]
+    assert set(members.frame["source_level"].to_list()) == {"peptide"}
+    relation = result.parsed.feature_relations["fasta_protein_group_membership_peptide"]
+    assert relation.coordinates.select("source", "target").unique().rows() == [
+        ("fasta_protein_group_members_peptide", "peptide")
+    ]
+    coverage = result.reports.protein_groups["peptide"]
+    assert (coverage.member_count, coverage.matched_member_count) == (4, 3)
+
+
+def test_merge_annotations_needs_a_level_with_fasta_accessions() -> None:
+    parsed = _parsed()
+    without_role = ParsedLevels(
+        levels={
+            "peptide": _level(
+                "peptide",
+                parsed.levels["peptide"].var.frame,
+                ("ProForma_peptide",),
+                {},
+            )
+        },
+        uns={},
+    )
+
+    with pytest.raises(FastaAnnotationError, match="no level declaring"):
+        FastaAnnotator(_proteins()).merge_annotations(without_role)
 
 
 def test_peptide_only_annotation_round_trips_through_h5ad(tmp_path: Path) -> None:
@@ -400,11 +443,18 @@ def test_peptide_properties_compose_with_fasta_annotation() -> None:
 
     complete = add_peptide_properties(annotated)
 
-    assert set(complete.levels["peptide"].varm) == {"fasta_validation", "peptide_properties"}
+    assert set(complete.levels["peptide"].varm) == {
+        "fasta_validation",
+        "fasta",
+        "peptide_properties",
+    }
     record = complete.levels["peptide"].metadata["fasta"]
     assert isinstance(record, dict)
     assert record["details"] == [
         {"slot": "varm", "name": "fasta_validation"},
+        {"slot": "varm", "name": "fasta"},
+        {"slot": "annotation_tables", "name": "fasta_protein_group_members_peptide"},
+        {"slot": "feature_relations", "name": "fasta_protein_group_membership_peptide"},
         {"slot": "varm", "name": "peptide_properties"},
     ]
     metadata = complete.metadata["fasta"]
@@ -427,11 +477,17 @@ def test_peptide_verification_after_properties_keeps_both_tables() -> None:
     assert record["details"] == [
         {"slot": "varm", "name": "peptide_properties"},
         {"slot": "varm", "name": "fasta_validation"},
+        {"slot": "varm", "name": "fasta"},
+        {"slot": "annotation_tables", "name": "fasta_protein_group_members_peptide"},
+        {"slot": "feature_relations", "name": "fasta_protein_group_membership_peptide"},
     ]
     assert set(_summary_names(record)) == {
         "matched_features",
         "unmatched_features",
         "decoy_features",
+        "matched_members",
+        "unmatched_members",
+        "ambiguous_members",
     }
 
 

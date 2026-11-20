@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import asdict
 from pathlib import PurePath
@@ -75,24 +76,39 @@ def peptide_inputs(parsed: ParsedLevels, /) -> dict[str, PeptideLevelInput]:
     return result
 
 
-def protein_group_input(parsed: ParsedLevels, /) -> ProteinGroupInput | None:
-    """Extract the protein axis and its persisted FASTA-accession role."""
-    level = parsed.levels.get("protein")
-    if level is None:
-        return None
-    accession_column = _role_column(level.var.roles, level.var.frame, "fasta_accessions")
-    if accession_column is None:
-        raise FastaAnnotationError("protein level does not declare column_roles.fasta_accessions")
-    collisions = _RESERVED_MEMBER_COLUMNS.intersection(level.var.key_columns)
-    if collisions:
-        raise FastaAnnotationError(
-            f"protein variable keys collide with FASTA member columns {sorted(collisions)}"
+def protein_group_inputs(parsed: ParsedLevels, /) -> dict[str, ProteinGroupInput]:
+    """Extract every level whose features name FASTA accessions through apb2's role.
+
+    The protein level and peptide-derived levels alike; a level without the role is left out.
+    """
+    result: dict[str, ProteinGroupInput] = {}
+    for name, level in parsed.levels.items():
+        accession_column = _role_column(level.var.roles, level.var.frame, "fasta_accessions")
+        if accession_column is None:
+            continue
+        collisions = _RESERVED_MEMBER_COLUMNS.intersection(level.var.key_columns)
+        if collisions:
+            raise FastaAnnotationError(
+                f"level {name!r} variable keys collide with FASTA member columns "
+                f"{sorted(collisions)}"
+            )
+        result[name] = ProteinGroupInput(
+            level=name,
+            frame=level.var.frame,
+            key_columns=level.var.key_columns,
+            accession_column=accession_column,
         )
-    return ProteinGroupInput(
-        frame=level.var.frame,
-        key_columns=level.var.key_columns,
-        accession_column=accession_column,
-    )
+    return result
+
+
+def member_table_name(level: str, /) -> str:
+    """The member table of one annotated level; the protein level's carries no suffix."""
+    return MEMBER_TABLE_NAME if level == "protein" else f"{MEMBER_TABLE_NAME}_{level}"
+
+
+def member_relation_name(level: str, /) -> str:
+    """The membership relation of one annotated level; the protein level's carries no suffix."""
+    return MEMBER_RELATION_NAME if level == "protein" else f"{MEMBER_RELATION_NAME}_{level}"
 
 
 def validate_peptide_output_names(
@@ -111,21 +127,22 @@ def validate_peptide_output_names(
         _level_record(parsed.levels[level_name], name)
 
 
-def validate_protein_output_names(parsed: ParsedLevels, /) -> None:
+def validate_protein_output_names(parsed: ParsedLevels, levels: Iterable[str], /) -> None:
     """Reject protein-annotation collisions before constructing a replacement."""
     _validate_operation_metadata(parsed, PROTEIN_ANNOTATION_OPERATION)
-    protein = parsed.levels["protein"]
-    _level_record(protein, "protein")
-    if FASTA_SUMMARY_NAME in protein.varm:
-        raise FastaAnnotationError(f"level 'protein' already contains varm[{FASTA_SUMMARY_NAME!r}]")
-    if MEMBER_TABLE_NAME in parsed.annotation_tables:
-        raise FastaAnnotationError(
-            f"result already contains annotation table {MEMBER_TABLE_NAME!r}"
-        )
-    if MEMBER_RELATION_NAME in parsed.feature_relations:
-        raise FastaAnnotationError(
-            f"result already contains feature relation {MEMBER_RELATION_NAME!r}"
-        )
+    for name in levels:
+        level = parsed.levels[name]
+        _level_record(level, name)
+        if FASTA_SUMMARY_NAME in level.varm:
+            raise FastaAnnotationError(
+                f"level {name!r} already contains varm[{FASTA_SUMMARY_NAME!r}]"
+            )
+        table = member_table_name(name)
+        if table in parsed.annotation_tables:
+            raise FastaAnnotationError(f"result already contains annotation table {table!r}")
+        relation = member_relation_name(name)
+        if relation in parsed.feature_relations:
+            raise FastaAnnotationError(f"result already contains feature relation {relation!r}")
 
 
 def apply_peptide_matches(
@@ -158,42 +175,44 @@ def apply_peptide_matches(
     )
     reports = FastaAnnotationReports(
         peptide_levels={name: match.coverage for name, match in matches.items()},
-        protein_groups=None,
+        protein_groups={},
     )
     return result, reports
 
 
-def apply_protein_group_match(
+def apply_protein_group_matches(
     parsed: ParsedLevels,
-    match: ProteinGroupMatch,
+    matches: dict[str, ProteinGroupMatch],
     /,
     *,
     protein_metadata: dict[str, JsonValue],
 ) -> tuple[ParsedLevels, FastaAnnotationReports]:
-    """Attach protein FASTA annotations to a deep replacement of the APB2 result."""
-    validate_protein_output_names(parsed)
+    """Attach each level's FASTA annotations to a deep replacement of the APB2 result."""
+    validate_protein_output_names(parsed, matches)
     result = deepcopy(parsed)
-    result.levels["protein"].varm[FASTA_SUMMARY_NAME] = match.summary.clone()
-    protein = result.levels["protein"]
-    protein.metadata["fasta"] = _merged(
-        _level_record(protein, "protein"), _protein_record(match.coverage)
-    )
-    result = result.with_annotation_table(
-        MEMBER_TABLE_NAME,
-        match.members.clone(),
-        match.member_key_columns,
-        {"producer": "apb-fasta", "schema_version": "1"},
-    ).with_feature_relation(
-        MEMBER_RELATION_NAME,
-        match.relation.select(
-            source=pl.lit(MEMBER_TABLE_NAME),
-            row=pl.col("row"),
-            target=pl.lit("protein"),
-            column=pl.col("column"),
-            value=pl.col("value"),
-        ),
-        {"producer": "apb-fasta", "semantic": "member_of"},
-    )
+    for name, match in matches.items():
+        level = result.levels[name]
+        level.varm[FASTA_SUMMARY_NAME] = match.summary.clone()
+        level.metadata["fasta"] = _merged(
+            _level_record(level, name), _protein_record(name, match.coverage)
+        )
+        table = member_table_name(name)
+        result = result.with_annotation_table(
+            table,
+            match.members.clone(),
+            match.member_key_columns,
+            {"producer": "apb-fasta", "schema_version": "1"},
+        ).with_feature_relation(
+            member_relation_name(name),
+            match.relation.select(
+                source=pl.lit(table),
+                row=pl.col("row"),
+                target=pl.lit(name),
+                column=pl.col("column"),
+                value=pl.col("value"),
+            ),
+            {"producer": "apb-fasta", "semantic": "member_of"},
+        )
     _record_operation_metadata(
         result,
         PROTEIN_ANNOTATION_OPERATION,
@@ -201,7 +220,7 @@ def apply_protein_group_match(
     )
     return result, FastaAnnotationReports(
         peptide_levels={},
-        protein_groups=match.coverage,
+        protein_groups={name: match.coverage for name, match in matches.items()},
     )
 
 
@@ -334,8 +353,8 @@ def _peptide_record(coverage: PeptideCoverage) -> dict[str, JsonValue]:
     }
 
 
-def _protein_record(coverage: ProteinGroupCoverage) -> dict[str, JsonValue]:
-    """The protein level's FASTA record: member coverage, its summary and its tables."""
+def _protein_record(level: str, coverage: ProteinGroupCoverage) -> dict[str, JsonValue]:
+    """An annotated level's FASTA record: member coverage, its summary and its tables."""
     return {
         "result": {PROTEIN_ANNOTATION_OPERATION: cast(dict[str, JsonValue], asdict(coverage))},
         "summary": [
@@ -362,8 +381,8 @@ def _protein_record(coverage: ProteinGroupCoverage) -> dict[str, JsonValue]:
         ],
         "details": [
             {"slot": "varm", "name": FASTA_SUMMARY_NAME},
-            {"slot": "annotation_tables", "name": MEMBER_TABLE_NAME},
-            {"slot": "feature_relations", "name": MEMBER_RELATION_NAME},
+            {"slot": "annotation_tables", "name": member_table_name(level)},
+            {"slot": "feature_relations", "name": member_relation_name(level)},
         ],
     }
 

@@ -89,4 +89,4 @@ Apply both operations together:
 apb-fasta run input.h5mu human.fasta contaminants.fasta --output complete.h5mu
 ```
 
-Peptide verification adds feature-aligned `varm["fasta_validation"]` tables. Its coverage counts matched and unmatched targets apart from decoys, the rows apb2 marks `apb_Decoy`, which every checked level must carry. Protein annotation adds protein-aligned `varm["fasta"]`, the lossless `fasta_protein_group_members` annotation table, and its directed relation to the protein axis.
+Peptide verification adds feature-aligned `varm["fasta_validation"]` tables. Its coverage counts matched and unmatched targets apart from decoys, the rows apb2 marks `apb_Decoy`, which every checked level must carry. Protein-group annotation adds `varm["fasta"]` to every level declaring the `fasta_accessions` role, the protein level and peptide-derived levels alike, with a lossless member table and its directed relation to that level's axis.

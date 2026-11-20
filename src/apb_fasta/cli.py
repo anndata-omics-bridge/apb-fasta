@@ -121,17 +121,16 @@ def _report_peptide_verification(result: FastaAnnotationResult) -> None:
 
 
 def _report_protein_annotations(result: FastaAnnotationResult) -> None:
-    coverage = result.reports.protein_groups
-    if coverage is None:
-        return
-    logger.info(
-        "protein_groups={} members_in_fasta={}/{} unmatched={} ambiguous={}",
-        coverage.group_count,
-        coverage.matched_member_count,
-        coverage.member_count,
-        coverage.unmatched_member_count,
-        coverage.ambiguous_member_count,
-    )
+    for level, coverage in result.reports.protein_groups.items():
+        logger.info(
+            "level={} protein_groups={} members_in_fasta={}/{} unmatched={} ambiguous={}",
+            level,
+            coverage.group_count,
+            coverage.matched_member_count,
+            coverage.member_count,
+            coverage.unmatched_member_count,
+            coverage.ambiguous_member_count,
+        )
 
 
 def main() -> int:
